@@ -30,8 +30,8 @@ export function AccountsClient({ accounts }: { accounts: Account[] }) {
   function handleUpdateBalance(account: Account) {
     const balance = parseInt(newBalance.replace(/[^0-9]/g, ''), 10)
     if (isNaN(balance)) return
-    startTransition(() => {
-      updateBalance(account.id, balance)
+    startTransition(async () => {
+      await updateBalance(account.id, balance)
       setEditAccount(null)
       setNewBalance('')
     })
@@ -39,16 +39,20 @@ export function AccountsClient({ accounts }: { accounts: Account[] }) {
 
   function handleCreate() {
     if (!newName.trim()) return
-    startTransition(() => {
-      createAccount({ name: newName.trim(), type: newType, category: newCategory })
-      setAddOpen(false)
-      setNewName('')
+    startTransition(async () => {
+      try {
+        await createAccount({ name: newName.trim(), type: newType, category: newCategory })
+        setAddOpen(false)
+        setNewName('')
+      } catch (e) {
+        alert('Failed to create account: ' + (e instanceof Error ? e.message : String(e)))
+      }
     })
   }
 
   function handleDelete(id: string) {
     if (!confirm('Delete this account and all its history?')) return
-    startTransition(() => deleteAccount(id))
+    startTransition(async () => { await deleteAccount(id) })
   }
 
   return (

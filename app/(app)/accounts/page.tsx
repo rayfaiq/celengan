@@ -10,7 +10,7 @@ export default async function AccountsPage() {
     .from('accounts')
     .select('*')
     .eq('user_id', user!.id)
-    .order('created_at')
+    .order('updated_at')
 
   const accounts: Account[] = (data ?? []).map(a => ({
     id: a.id,
