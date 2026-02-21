@@ -9,6 +9,7 @@ type Transaction = {
   amount: number
   category: string | null
   date: string
+  type: 'spending' | 'income'
 }
 
 type Props = {
@@ -28,8 +29,8 @@ export function ExportCSV({ accounts, transactions }: Props) {
       ...accounts.map(a => `${a.name},${a.type},${a.category},${a.balance}`),
       '',
       'TRANSACTIONS',
-      'Date,Description,Category,Amount',
-      ...transactions.map(t => `${t.date},${t.description},${t.category ?? ''},${t.amount}`),
+      'Date,Description,Category,Type,Amount',
+      ...transactions.map(t => `${t.date},${t.description},${t.category ?? ''},${t.type},${t.amount}`),
     ]
 
     const csv = rows.join('\n')

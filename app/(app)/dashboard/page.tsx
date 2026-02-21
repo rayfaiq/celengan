@@ -36,7 +36,7 @@ export default async function DashboardPage() {
     .from('accounts')
     .select('*')
     .eq('user_id', user!.id)
-    .order('created_at')
+    .order('updated_at')
 
   const accounts: Account[] = (accountRows ?? []).map(a => ({
     id: a.id,
@@ -180,7 +180,7 @@ export default async function DashboardPage() {
       </Card>
 
       {/* Per-Account Reconciliation */}
-      {accountDeltas.some(d => Math.abs(d.unaccounted) > 0) && (
+      {accountDeltas.some(d => !d.isInitial && Math.abs(d.unaccounted) > 0) && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Account Reconciliation</CardTitle>
@@ -191,7 +191,7 @@ export default async function DashboardPage() {
           <CardContent>
             <div className="space-y-2">
               {accountDeltas
-                .filter(d => Math.abs(d.unaccounted) > 0)
+                .filter(d => !d.isInitial && Math.abs(d.unaccounted) > 0)
                 .map(d => (
                   <div
                     key={d.accountId}

@@ -3,23 +3,28 @@ import { AlertTriangle, CheckCircle } from 'lucide-react'
 
 type Props = {
   unaccountedSpending: number
-  transactionTotal: number
+  spendingTotal: number
+  incomeTotal: number
   totalDelta: number
 }
 
-export function ExpenseDelta({ unaccountedSpending, transactionTotal, totalDelta }: Props) {
+export function ExpenseDelta({ unaccountedSpending, spendingTotal, incomeTotal, totalDelta }: Props) {
   const isHealthy = unaccountedSpending <= 0
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-3 gap-2 text-sm">
+      <div className="grid grid-cols-4 gap-2 text-sm">
         <div className="bg-muted rounded-md p-3">
           <p className="text-xs text-muted-foreground mb-1">Total Spending</p>
           <p className="font-bold text-red-400">{formatIDR(totalDelta)}</p>
         </div>
         <div className="bg-muted rounded-md p-3">
-          <p className="text-xs text-muted-foreground mb-1">Accounted</p>
-          <p className="font-bold text-emerald-400">{formatIDR(transactionTotal)}</p>
+          <p className="text-xs text-muted-foreground mb-1">Spending</p>
+          <p className="font-bold text-red-400">{formatIDR(spendingTotal)}</p>
+        </div>
+        <div className="bg-muted rounded-md p-3">
+          <p className="text-xs text-muted-foreground mb-1">Income</p>
+          <p className="font-bold text-emerald-400">{formatIDR(incomeTotal)}</p>
         </div>
         <div className="bg-muted rounded-md p-3">
           <p className="text-xs text-muted-foreground mb-1">Unaccounted</p>

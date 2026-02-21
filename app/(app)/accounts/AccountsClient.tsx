@@ -16,24 +16,28 @@ import { Badge } from '@/components/ui/badge'
 import { Plus, Trash2, Pencil } from 'lucide-react'
 import { updateBalance, createAccount, deleteAccount } from '@/app/actions/accounts'
 import { formatIDR } from '@/lib/calculations'
+import { AmountInput } from '@/components/AmountInput'
 import type { Account } from '@/lib/calculations'
 
 export function AccountsClient({ accounts }: { accounts: Account[] }) {
   const [isPending, startTransition] = useTransition()
   const [editAccount, setEditAccount] = useState<Account | null>(null)
-  const [newBalance, setNewBalance] = useState('')
+  const [newBalance, setNewBalance] = useState<number | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [newName, setNewName] = useState('')
   const [newType, setNewType] = useState<'cash' | 'investment'>('cash')
   const [newCategory, setNewCategory] = useState<'core' | 'satellite'>('core')
 
   function handleUpdateBalance(account: Account) {
-    const balance = parseInt(newBalance.replace(/[^0-9]/g, ''), 10)
-    if (isNaN(balance)) return
+    if (newBalance == null) return
     startTransition(async () => {
-      await updateBalance(account.id, balance)
-      setEditAccount(null)
-      setNewBalance('')
+      try {
+        await updateBalance(account.id, newBalance)
+        setEditAccount(null)
+        setNewBalance(null)
+      } catch (e) {
+        alert('Failed to update balance: ' + (e instanceof Error ? e.message : String(e)))
+      }
     })
   }
 
@@ -163,8 +167,13 @@ export function AccountsClient({ accounts }: { accounts: Account[] }) {
               <Dialog
                 open={editAccount?.id === account.id}
                 onOpenChange={open => {
-                  setEditAccount(open ? account : null)
-                  setNewBalance('')
+                  if (open) {
+                    setEditAccount(account)
+                    setNewBalance(account.balance)
+                  } else {
+                    setEditAccount(null)
+                    setNewBalance(null)
+                  }
                 }}
               >
                 <DialogTrigger asChild>
@@ -180,13 +189,7 @@ export function AccountsClient({ accounts }: { accounts: Account[] }) {
                   <div className="space-y-4 pt-2">
                     <div className="space-y-2">
                       <Label>New Balance (IDR)</Label>
-                      <Input
-                        type="number"
-                        value={newBalance}
-                        onChange={e => setNewBalance(e.target.value)}
-                        placeholder={account.balance.toString()}
-                        autoFocus
-                      />
+                      <AmountInput key={account.id} value={newBalance} onChange={setNewBalance} autoFocus />
                     </div>
                     <Button
                       onClick={() => handleUpdateBalance(account)}

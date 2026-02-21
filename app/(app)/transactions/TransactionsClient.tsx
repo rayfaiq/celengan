@@ -25,6 +25,7 @@ import { createTransaction, deleteTransaction } from '@/app/actions/transactions
 import { ExpenseDelta } from '@/components/ExpenseDelta'
 import { AmountInput } from '@/components/AmountInput'
 import { formatIDR } from '@/lib/calculations'
+import type { AccountDelta } from '@/lib/calculations'
 
 type Transaction = {
   id: string
@@ -44,6 +45,7 @@ type Props = {
   totalDelta: number
   accounts: { id: string; name: string }[]
   accountFilter?: string
+  accountDeltas: AccountDelta[]
 }
 
 export function TransactionsClient({
@@ -54,6 +56,7 @@ export function TransactionsClient({
   totalDelta,
   accounts,
   accountFilter,
+  accountDeltas,
 }: Props) {
   const [isPending, startTransition] = useTransition()
   const [open, setOpen] = useState(false)
@@ -190,20 +193,32 @@ export function TransactionsClient({
           >
             All
           </a>
-          {accounts.map(a => (
-            <a
-              key={a.id}
-              href={`/transactions?account=${a.id}`}
-              className={cn(
-                'text-xs px-3 py-1.5 rounded-full border transition-colors',
-                accountFilter === a.id
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'border-border text-muted-foreground hover:bg-muted'
-              )}
-            >
-              {a.name}
-            </a>
-          ))}
+          {accounts.map(a => {
+            const delta = accountDeltas.find(d => d.accountId === a.id)
+            const hasUnaccounted = delta && !delta.isInitial && Math.abs(delta.unaccounted) > 0
+            return (
+              <a
+                key={a.id}
+                href={`/transactions?account=${a.id}`}
+                className={cn(
+                  'text-xs px-3 py-1.5 rounded-full border transition-colors flex items-center gap-1.5',
+                  accountFilter === a.id
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'border-border text-muted-foreground hover:bg-muted'
+                )}
+              >
+                {a.name}
+                {hasUnaccounted && (
+                  <span className={cn(
+                    'font-medium',
+                    accountFilter === a.id ? 'text-primary-foreground/80' : 'text-amber-400'
+                  )}>
+                    {formatIDR(Math.abs(delta.unaccounted))}
+                  </span>
+                )}
+              </a>
+            )
+          })}
         </div>
       )}
 

@@ -21,6 +21,7 @@ export type AccountDelta = {
   linkedNet: number      // sum(income) - sum(spending) linked to this account
   unaccounted: number    // rawDelta - linkedNet
   lastUpdated: string    // recorded_at of the latest snapshot
+  isInitial: boolean     // true when previous_balance=0 and no prior snapshot (first setup)
 }
 
 export function calcNetWorth(accounts: Account[]): number {
@@ -51,6 +52,9 @@ export function calcPerAccountDeltas(
     const linkedSpending = linked.filter(t => t.type === 'spending').reduce((s, t) => s + t.amount, 0)
     const linkedNet = linkedIncome - linkedSpending
 
+    const hasPriorSnapshot = snapshotPrevDates.has(account.id)
+    const isInitial = !hasPriorSnapshot && snapshot.previous_balance === 0
+
     return {
       accountId: account.id,
       accountName: account.name,
@@ -58,6 +62,7 @@ export function calcPerAccountDeltas(
       linkedNet,
       unaccounted: rawDelta - linkedNet,
       lastUpdated: snapshot.recorded_at,
+      isInitial,
     } satisfies AccountDelta
   }).filter((d): d is AccountDelta => d !== null)
 }
