@@ -8,6 +8,8 @@ export async function createTransaction(data: {
   amount: number
   category?: string
   date: string
+  type: 'spending' | 'income'
+  account_id?: string
 }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

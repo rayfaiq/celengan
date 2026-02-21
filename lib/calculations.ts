@@ -6,8 +6,60 @@ export type Account = {
   balance: number
 }
 
+export type BalanceHistoryRow = {
+  id: string
+  account_id: string
+  balance_at_time: number
+  previous_balance: number
+  recorded_at: string
+}
+
+export type AccountDelta = {
+  accountId: string
+  accountName: string
+  rawDelta: number       // balance_at_time - previous_balance
+  linkedNet: number      // sum(income) - sum(spending) linked to this account
+  unaccounted: number    // rawDelta - linkedNet
+  lastUpdated: string    // recorded_at of the latest snapshot
+}
+
 export function calcNetWorth(accounts: Account[]): number {
   return accounts.reduce((sum, a) => sum + a.balance, 0)
+}
+
+export function calcPerAccountDeltas(
+  accounts: Account[],
+  latestSnapshots: BalanceHistoryRow[],
+  transactions: { account_id: string | null; amount: number; type: 'spending' | 'income'; date: string }[],
+  snapshotPrevDates: Map<string, string>
+): AccountDelta[] {
+  return accounts.map(account => {
+    const snapshot = latestSnapshots.find(s => s.account_id === account.id)
+    if (!snapshot) return null
+
+    const rawDelta = snapshot.balance_at_time - snapshot.previous_balance
+    const prevSnapshotDate = snapshotPrevDates.get(account.id) ?? '1970-01-01'
+
+    const linked = transactions.filter(
+      t =>
+        t.account_id === account.id &&
+        t.date >= prevSnapshotDate &&
+        t.date <= snapshot.recorded_at.slice(0, 10)
+    )
+
+    const linkedIncome = linked.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
+    const linkedSpending = linked.filter(t => t.type === 'spending').reduce((s, t) => s + t.amount, 0)
+    const linkedNet = linkedIncome - linkedSpending
+
+    return {
+      accountId: account.id,
+      accountName: account.name,
+      rawDelta,
+      linkedNet,
+      unaccounted: rawDelta - linkedNet,
+      lastUpdated: snapshot.recorded_at,
+    } satisfies AccountDelta
+  }).filter((d): d is AccountDelta => d !== null)
 }
 
 export function calcUnaccountedSpending(
@@ -98,4 +150,26 @@ export function formatIDR(amount: number): string {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(amount)
+}
+
+export function parseAmountInput(raw: string): number | null {
+  const trimmed = raw.trim().toLowerCase().replace(/\s/g, '')
+  if (!trimmed) return null
+
+  const jtMatch = trimmed.match(/^([\d.]+)jt$/)
+  if (jtMatch) {
+    const base = parseFloat(jtMatch[1])
+    return isNaN(base) ? null : Math.round(base * 1_000_000)
+  }
+
+  const kMatch = trimmed.match(/^([\d.]+)k$/)
+  if (kMatch) {
+    const base = parseFloat(kMatch[1])
+    return isNaN(base) ? null : Math.round(base * 1_000)
+  }
+
+  // No suffix: dots are thousand separators (Indonesian format), comma is decimal
+  const plain = trimmed.replace(/\./g, '').replace(',', '.')
+  const base = parseFloat(plain)
+  return isNaN(base) ? null : Math.round(base)
 }

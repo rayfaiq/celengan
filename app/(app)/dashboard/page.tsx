@@ -5,9 +5,14 @@ import { RebalancingSuggester } from '@/components/RebalancingSuggester'
 import { MarriageFundGoal } from '@/components/MarriageFundGoal'
 import { ExpenseDelta } from '@/components/ExpenseDelta'
 import { ExportCSV } from '@/components/ExportCSV'
-import { calcNetWorth, calcUnaccountedSpending, formatIDR } from '@/lib/calculations'
+import {
+  calcNetWorth,
+  calcUnaccountedSpending,
+  calcPerAccountDeltas,
+  formatIDR,
+} from '@/lib/calculations'
 import { upsertSettings } from '@/app/actions/settings'
-import type { Account } from '@/lib/calculations'
+import type { Account, BalanceHistoryRow } from '@/lib/calculations'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -43,7 +48,7 @@ export default async function DashboardPage() {
 
   const netWorth = calcNetWorth(accounts)
 
-  // Current month's transactions
+  // Current month's transactions (for global delta card)
   const now = new Date()
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
 
@@ -54,26 +59,51 @@ export default async function DashboardPage() {
     .gte('date', monthStart)
     .order('date', { ascending: false })
 
-  const transactions = txRows ?? []
-  const transactionTotal = transactions.reduce(
-    (sum: number, t: { amount: number }) => sum + t.amount,
-    0
-  )
+  const transactions = (txRows ?? []) as {
+    amount: number
+    type: 'spending' | 'income'
+    description: string
+    category: string | null
+    date: string
+  }[]
+  const spendingTotal = transactions.filter(t => t.type === 'spending').reduce((sum, t) => sum + t.amount, 0)
+  const incomeTotal = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0)
+  const netTransactionSpending = spendingTotal - incomeTotal
 
-  // Previous month balance (latest snapshot per account before this month)
-  const { data: historyRows } = await supabase
+  // All balance_history for per-account delta, ordered newest first
+  const { data: allSnapshotRows } = await supabase
     .from('balance_history')
-    .select('balance_at_time, recorded_at, account_id')
-    .lt('recorded_at', monthStart)
+    .select('id, account_id, balance_at_time, previous_balance, recorded_at')
+    .in('account_id', accounts.length > 0 ? accounts.map(a => a.id) : ['00000000-0000-0000-0000-000000000000'])
     .order('recorded_at', { ascending: false })
 
-  const seenAccounts = new Set<string>()
-  let prevTotal = 0
-  for (const row of historyRows ?? []) {
-    if (!seenAccounts.has(row.account_id)) {
-      seenAccounts.add(row.account_id)
-      prevTotal += row.balance_at_time
+  const snapshots = (allSnapshotRows ?? []) as BalanceHistoryRow[]
+
+  // Latest snapshot per account
+  const latestSnapshots: BalanceHistoryRow[] = []
+  const seenForLatest = new Set<string>()
+  for (const s of snapshots) {
+    if (!seenForLatest.has(s.account_id)) {
+      seenForLatest.add(s.account_id)
+      latestSnapshots.push(s)
     }
+  }
+
+  // Previous snapshot date per account (window start for per-account reconciliation)
+  const prevSnapshotDates = new Map<string, string>()
+  const latestIds = new Set(latestSnapshots.map(l => l.id))
+  const seenForPrev = new Set<string>()
+  for (const s of snapshots) {
+    if (!latestIds.has(s.id) && !seenForPrev.has(s.account_id)) {
+      prevSnapshotDates.set(s.account_id, s.recorded_at.slice(0, 10))
+      seenForPrev.add(s.account_id)
+    }
+  }
+
+  // prevTotal for global delta: sum of previous_balance from latest snapshots
+  let prevTotal = 0
+  for (const s of latestSnapshots) {
+    prevTotal += s.previous_balance
   }
 
   const monthlyIncome = settings?.monthly_income ?? 20000000
@@ -82,8 +112,23 @@ export default async function DashboardPage() {
     netWorth,
     prevTotal,
     monthlyIncome,
-    transactionTotal
+    netTransactionSpending
   )
+
+  // All transactions for per-account delta (not month-scoped)
+  const { data: allTxRows } = await supabase
+    .from('transactions')
+    .select('account_id, amount, type, date')
+    .eq('user_id', user!.id)
+
+  const allTransactions = (allTxRows ?? []) as {
+    account_id: string | null
+    amount: number
+    type: 'spending' | 'income'
+    date: string
+  }[]
+
+  const accountDeltas = calcPerAccountDeltas(accounts, latestSnapshots, allTransactions, prevSnapshotDates)
 
   // Net worth chart: aggregate balance_history by month (last 6)
   const { data: allHistory } = await supabase
@@ -108,16 +153,12 @@ export default async function DashboardPage() {
       netWorth: Array.from(accountMap.values()).reduce((s, v) => s + v, 0),
     }))
 
-  const exportTransactions = transactions.map((t: {
-    description: string
-    amount: number
-    category: string | null
-    date: string
-  }) => ({
+  const exportTransactions = transactions.map(t => ({
     description: t.description,
     amount: t.amount,
     category: t.category,
     date: t.date,
+    type: t.type,
   }))
 
   return (
@@ -137,6 +178,48 @@ export default async function DashboardPage() {
           <NetWorthChart data={chartData} />
         </CardContent>
       </Card>
+
+      {/* Per-Account Reconciliation */}
+      {accountDeltas.some(d => Math.abs(d.unaccounted) > 0) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Account Reconciliation</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Accounts with unaccounted balance changes
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {accountDeltas
+                .filter(d => Math.abs(d.unaccounted) > 0)
+                .map(d => (
+                  <div
+                    key={d.accountId}
+                    className="flex items-center justify-between p-3 bg-amber-500/10 rounded-md"
+                  >
+                    <div>
+                      <p className="font-medium text-sm">{d.accountName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Balance changed{' '}
+                        <span className={d.rawDelta >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                          {d.rawDelta >= 0 ? '+' : ''}{formatIDR(d.rawDelta)}
+                        </span>
+                        {' · '}
+                        <span className="text-amber-400">{formatIDR(Math.abs(d.unaccounted))} unexplained</span>
+                      </p>
+                    </div>
+                    <a
+                      href={`/transactions?account=${d.accountId}`}
+                      className="text-xs text-amber-400 hover:underline shrink-0 ml-4"
+                    >
+                      Add details →
+                    </a>
+                  </div>
+                ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Rebalancing */}
@@ -173,7 +256,8 @@ export default async function DashboardPage() {
         <CardContent>
           <ExpenseDelta
             unaccountedSpending={unaccountedSpending}
-            transactionTotal={transactionTotal}
+            spendingTotal={spendingTotal}
+            incomeTotal={incomeTotal}
             totalDelta={totalDelta}
           />
         </CardContent>

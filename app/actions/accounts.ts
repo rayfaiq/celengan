@@ -8,6 +8,16 @@ export async function updateBalance(accountId: string, newBalance: number) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
 
+  // Fetch current balance to store as previous_balance in history
+  const { data: existing } = await supabase
+    .from('accounts')
+    .select('balance')
+    .eq('id', accountId)
+    .eq('user_id', user.id)
+    .single()
+
+  const previousBalance = existing?.balance ?? 0
+
   const { error: updateError } = await supabase
     .from('accounts')
     .update({ balance: newBalance, updated_at: new Date().toISOString() })
@@ -18,7 +28,7 @@ export async function updateBalance(accountId: string, newBalance: number) {
 
   const { error: historyError } = await supabase
     .from('balance_history')
-    .insert({ account_id: accountId, balance_at_time: newBalance })
+    .insert({ account_id: accountId, balance_at_time: newBalance, previous_balance: previousBalance })
 
   if (historyError) throw historyError
 
