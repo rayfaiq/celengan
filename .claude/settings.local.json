@@ -8,7 +8,16 @@
       "Bash(git init:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(git -C \"c:/Users/PC/bot claude/celengan\" remote -v)",
+      "Bash(git -C \"c:/Users/PC/bot claude/celengan\" config --list --local)",
+      "Bash(git -C \"c:/Users/PC/bot claude/celengan\" status)",
+      "Bash(git push:*)",
+      "Skill(ralph-loop:ralph-loop)",
+      "Skill(ralph-loop:ralph-loop:*)",
+      "Bash(\"C:/Users/PC/.claude/plugins/cache/claude-plugins-official/ralph-loop/8deab8460a9d/scripts/setup-ralph-loop.sh\" --help)",
+      "Bash(supabase --version:*)",
+      "Bash(npx supabase:*)"
     ]
   }
 }
