@@ -15,7 +15,7 @@ export function ExpenseDelta({ unaccountedSpending, spendingTotal, incomeTotal, 
     <div className="space-y-3">
       <div className="grid grid-cols-4 gap-2 text-sm">
         <div className="bg-muted rounded-md p-3">
-          <p className="text-xs text-muted-foreground mb-1">Total Spending</p>
+          <p className="text-xs text-muted-foreground mb-1">Balance Change</p>
           <p className="font-bold text-red-400">{formatIDR(totalDelta)}</p>
         </div>
         <div className="bg-muted rounded-md p-3">

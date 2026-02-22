@@ -97,25 +97,39 @@ export default async function TransactionsPage({
 
   const accountDeltas = calcPerAccountDeltas(accounts, latestSnapshots, allTransactions, prevSnapshotDates)
 
-  // Global delta for the expense delta card
-  const currentTotal = accounts.reduce((s, a) => s + a.balance, 0)
-  const spendingTotal = transactions.filter(t => t.type === 'spending').reduce((s, t) => s + t.amount, 0)
-  const incomeTotal = transactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
-  const netTransactionSpending = spendingTotal - incomeTotal
-  const monthlyIncome = settings?.monthly_income ?? 20000000
+  // Compute spending card values — either per-account or global
+  let spendingTotal: number
+  let incomeTotal: number
+  let totalDelta: number
+  let unaccountedSpending: number
 
-  let prevTotal = 0
-  for (const s of latestSnapshots) {
-    prevTotal += s.previous_balance
+  if (accountFilter) {
+    // Per-account view: use the selected account's delta
+    const delta = accountDeltas.find(d => d.accountId === accountFilter)
+    spendingTotal = transactions.filter(t => t.type === 'spending').reduce((s, t) => s + t.amount, 0)
+    incomeTotal = transactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
+    // rawDelta = balance_at_time - previous_balance; negative for spending, so negate for display
+    totalDelta = delta && !delta.isInitial ? Math.max(0, -delta.rawDelta) : 0
+    unaccountedSpending = delta && !delta.isInitial ? Math.max(0, -delta.unaccounted) : 0
+  } else {
+    // Global view: all accounts, current month
+    spendingTotal = transactions.filter(t => t.type === 'spending').reduce((s, t) => s + t.amount, 0)
+    incomeTotal = transactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
+    const netTransactionSpending = spendingTotal - incomeTotal
+    const currentTotal = accounts.reduce((s, a) => s + a.balance, 0)
+    let prevTotal = 0
+    for (const s of latestSnapshots) {
+      prevTotal += s.previous_balance
+    }
+    const monthlyIncome = settings?.monthly_income ?? 20000000
+    totalDelta = Math.max(0, prevTotal + monthlyIncome - currentTotal)
+    unaccountedSpending = calcUnaccountedSpending(
+      currentTotal,
+      prevTotal,
+      monthlyIncome,
+      netTransactionSpending
+    )
   }
-
-  const totalDelta = Math.max(0, prevTotal + monthlyIncome - currentTotal)
-  const unaccountedSpending = calcUnaccountedSpending(
-    currentTotal,
-    prevTotal,
-    monthlyIncome,
-    netTransactionSpending
-  )
 
   return (
     <TransactionsClient

@@ -15,6 +15,20 @@ export async function createTransaction(data: {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
 
+  // Verify account ownership if account_id is provided
+  if (data.account_id) {
+    const { data: account, error: accountError } = await supabase
+      .from('accounts')
+      .select('id')
+      .eq('id', data.account_id)
+      .eq('user_id', user.id)
+      .single()
+
+    if (accountError || !account) {
+      throw new Error('Invalid account or unauthorized')
+    }
+  }
+
   const { error } = await supabase
     .from('transactions')
     .insert({ ...data, user_id: user.id })

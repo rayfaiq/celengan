@@ -34,6 +34,7 @@ export async function updateBalance(accountId: string, newBalance: number) {
 
   revalidatePath('/dashboard')
   revalidatePath('/accounts')
+  revalidatePath('/history')
 }
 
 export async function createAccount(data: {
@@ -70,4 +71,79 @@ export async function deleteAccount(accountId: string) {
 
   revalidatePath('/accounts')
   revalidatePath('/dashboard')
+}
+
+export async function deleteBalanceHistory(historyId: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Unauthorized')
+
+  // Verify the history entry belongs to user's account
+  const { data: historyData } = await supabase
+    .from('balance_history')
+    .select('account_id')
+    .eq('id', historyId)
+    .single()
+
+  if (!historyData) throw new Error('History entry not found')
+
+  // Verify account belongs to user
+  const { data: accountData } = await supabase
+    .from('accounts')
+    .select('id')
+    .eq('id', historyData.account_id)
+    .eq('user_id', user.id)
+    .single()
+
+  if (!accountData) throw new Error('Unauthorized')
+
+  const { error } = await supabase
+    .from('balance_history')
+    .delete()
+    .eq('id', historyId)
+
+  if (error) throw error
+
+  revalidatePath('/history')
+}
+
+export async function updateBalanceHistory(
+  historyId: string,
+  newBalance: number,
+  newPreviousBalance: number
+) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Unauthorized')
+
+  // Verify the history entry belongs to user's account
+  const { data: historyData } = await supabase
+    .from('balance_history')
+    .select('account_id')
+    .eq('id', historyId)
+    .single()
+
+  if (!historyData) throw new Error('History entry not found')
+
+  // Verify account belongs to user
+  const { data: accountData } = await supabase
+    .from('accounts')
+    .select('id')
+    .eq('id', historyData.account_id)
+    .eq('user_id', user.id)
+    .single()
+
+  if (!accountData) throw new Error('Unauthorized')
+
+  const { error } = await supabase
+    .from('balance_history')
+    .update({
+      balance_at_time: newBalance,
+      previous_balance: newPreviousBalance,
+    })
+    .eq('id', historyId)
+
+  if (error) throw error
+
+  revalidatePath('/history')
 }
