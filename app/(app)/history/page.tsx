@@ -22,7 +22,15 @@ export default async function HistoryPage() {
   }))
 
   // Fetch all balance history with account information
-  let history = []
+  interface HistoryItem {
+    id: string
+    accountId: string
+    balanceAtTime: number
+    previousBalance: number
+    createdAt: Date
+  }
+
+  let history: HistoryItem[] = []
 
   if (accounts.length > 0) {
     const { data: historyData } = await supabase
