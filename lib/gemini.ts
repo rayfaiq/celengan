@@ -32,7 +32,7 @@ export async function parseTransactionMessage(
     .join('\n')
 
   const systemPrompt = `You are a financial assistant for a personal finance app called Celengan.
-The user communicates via WhatsApp in Indonesian or English.
+The user communicates via Telegram in Indonesian or English.
 
 The user has these accounts:
 ${accountList || '(No accounts yet)'}
@@ -70,7 +70,8 @@ Return one of these JSON shapes:
 
   try {
     return JSON.parse(cleaned) as TransactionIntent
-  } catch {
+  } catch (e) {
+    console.error('Gemini JSON parse failed. Raw response:', raw, 'Error:', e)
     return { type: 'unclear', language: 'en' }
   }
 }
