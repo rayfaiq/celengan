@@ -1,6 +1,6 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { GoogleGenAI } from '@google/genai'
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! })
 
 export type TransactionIntent =
   | {
@@ -25,13 +25,11 @@ export async function parseTransactionMessage(
   message: string,
   accounts: Array<{ id: string; name: string; balance: number }>
 ): Promise<TransactionIntent> {
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash-8b' })
-
   const accountList = accounts
     .map(a => `- ${a.name} (balance: Rp ${a.balance.toLocaleString('id-ID')})`)
     .join('\n')
 
-  const systemPrompt = `You are a financial assistant for a personal finance app called Celengan.
+  const prompt = `You are a financial assistant for a personal finance app called Celengan.
 The user communicates via Telegram in Indonesian or English.
 
 The user has these accounts:
@@ -56,14 +54,16 @@ Return one of these JSON shapes:
 {"type":"spending","amount":25000,"description":"Kopi","category":"food","account_name":null,"language":"id"}
 {"type":"income","amount":5000000,"description":"Gaji","category":null,"account_name":"BCA","language":"id"}
 {"type":"query","query_type":"balance","language":"id"}
-{"type":"unclear","language":"id"}`
+{"type":"unclear","language":"id"}
 
-  const result = await model.generateContent([
-    { text: systemPrompt },
-    { text: `User message: ${message}` },
-  ])
+User message: ${message}`
 
-  const raw = result.response.text().trim()
+  const response = await ai.models.generateContent({
+    model: 'gemini-1.5-flash-8b',
+    contents: prompt,
+  })
+
+  const raw = response.text?.trim() ?? ''
 
   // Strip potential markdown code fences from Gemini
   const cleaned = raw.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/, '')
