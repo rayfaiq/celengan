@@ -25,7 +25,7 @@ export async function parseTransactionMessage(
   message: string,
   accounts: Array<{ id: string; name: string; balance: number }>
 ): Promise<TransactionIntent> {
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
+  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash-8b' })
 
   const accountList = accounts
     .map(a => `- ${a.name} (balance: Rp ${a.balance.toLocaleString('id-ID')})`)
