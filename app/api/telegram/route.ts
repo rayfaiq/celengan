@@ -30,7 +30,80 @@ async function handleSaldo(chatId: number, accounts: Account[]): Promise<void> {
   const lines = accounts.map(a => `• ${a.name}: ${formatCurrency(a.balance)}`)
   await telegramReply(
     chatId,
-    `*💰 Saldo Akunmu:*\n${lines.join('\n')}\n\n*Total: ${formatCurrency(totalBalance)}*`
+    `*💰 Saldo Akunmu:*\n${lines.join('\n')}\n\n*Total: ${formatCurrency(totalBalance)}*\n\n_Set saldo: /saldo NamaAkun JumlahBaru_\n_Contoh: /saldo BCA 5000000_`
+  )
+}
+
+// Parse shorthand amounts: 5jt→5000000, 500rb→500000, 5k→5000
+function parseAmount(raw: string): number | null {
+  const s = raw.toLowerCase().replace(/\./g, '').replace(/,/g, '')
+  const m = s.match(/^(\d+(?:\.\d+)?)(jt|juta|rb|ribu|k)?$/)
+  if (!m) return null
+  const num = parseFloat(m[1])
+  if (m[2] === 'jt' || m[2] === 'juta') return Math.round(num * 1_000_000)
+  if (m[2] === 'rb' || m[2] === 'ribu') return Math.round(num * 1_000)
+  if (m[2] === 'k') return Math.round(num * 1_000)
+  return Math.round(num)
+}
+
+async function handleSaldoSet(
+  chatId: number,
+  userId: string,
+  accounts: Account[],
+  accountQuery: string,
+  amountRaw: string,
+  supabase: ReturnType<typeof createServiceClient>
+): Promise<void> {
+  // Fuzzy match account name
+  const q = accountQuery.toLowerCase()
+  const matched = accounts.find(
+    a => a.name.toLowerCase().includes(q) || q.includes(a.name.toLowerCase())
+  )
+  if (!matched) {
+    const names = accounts.map(a => `• ${a.name}`).join('\n')
+    await telegramReply(
+      chatId,
+      `Akun *${accountQuery}* tidak ditemukan.\n\nAkun yang ada:\n${names}`
+    )
+    return
+  }
+
+  const newBalance = parseAmount(amountRaw)
+  if (newBalance === null || newBalance < 0) {
+    await telegramReply(chatId, `Jumlah tidak valid: \`${amountRaw}\`\nContoh: 5000000, 5jt, 500rb`)
+    return
+  }
+
+  const previousBalance = matched.balance
+
+  // Update account balance
+  const { error: updateError } = await supabase
+    .from('accounts')
+    .update({ balance: newBalance, updated_at: new Date().toISOString() })
+    .eq('id', matched.id)
+    .eq('user_id', userId)
+
+  if (updateError) {
+    console.error('Balance update error:', updateError)
+    await telegramReply(chatId, 'Gagal update saldo. Coba lagi.')
+    return
+  }
+
+  // Insert balance history (same as updateBalance server action)
+  await supabase.from('balance_history').insert({
+    account_id: matched.id,
+    balance_at_time: newBalance,
+    previous_balance: previousBalance,
+  })
+
+  const diff = newBalance - previousBalance
+  const diffStr = diff >= 0 ? `+${formatCurrency(diff)}` : `-${formatCurrency(Math.abs(diff))}`
+  await telegramReply(
+    chatId,
+    `✅ *Saldo ${matched.name} diperbarui!*\n` +
+      `Sebelumnya: ${formatCurrency(previousBalance)}\n` +
+      `Sekarang: ${formatCurrency(newBalance)}\n` +
+      `Perubahan: ${diffStr}`
   )
 }
 
@@ -110,6 +183,7 @@ function getHelpMessage(accounts: Account[], defaultAccountId: string | null): s
     `• \`listrik 150rb bca\` — pakai akun tertentu\n\n` +
     `*Perintah:*\n` +
     `• /saldo — lihat semua saldo\n` +
+    `• /saldo BCA 5jt — update saldo akun\n` +
     `• /transaksi — transaksi bulan ini\n` +
     `• /akun — lihat & ganti akun default\n` +
     `• /bantuan — pesan ini\n\n` +
@@ -173,7 +247,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const cmd = messageBody.toLowerCase().split(' ')[0]
 
     if (cmd === '/saldo' || cmd === '/balance') {
-      await handleSaldo(chatId, accounts)
+      // /saldo <account> <amount> → set balance
+      // /saldo alone → view balances
+      const parts = messageBody.split(/\s+/)
+      if (parts.length >= 3) {
+        const accountQuery = parts.slice(1, parts.length - 1).join(' ')
+        const amountRaw = parts[parts.length - 1]
+        await handleSaldoSet(chatId, userId, accounts, accountQuery, amountRaw, supabase)
+      } else {
+        await handleSaldo(chatId, accounts)
+      }
       return NextResponse.json({ ok: true })
     }
 
