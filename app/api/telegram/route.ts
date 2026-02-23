@@ -17,27 +17,111 @@ async function telegramReply(chatId: number, message: string): Promise<void> {
   })
 }
 
-// ─── Reply messages ───────────────────────────────────────────────────────────
-function getSetupInstructions(lang: 'id' | 'en'): string {
-  if (lang === 'id') {
-    return `Halo! Username Telegram kamu belum terdaftar di Celengan.\n\nBuka aplikasi Celengan → Settings → Telegram Integration, lalu masukkan username Telegram kamu untuk mulai.`
+type Account = { id: string; name: string; balance: number; type: string; category: string }
+
+// ─── Slash command handlers ───────────────────────────────────────────────────
+
+async function handleSaldo(chatId: number, accounts: Account[]): Promise<void> {
+  if (accounts.length === 0) {
+    await telegramReply(chatId, 'Belum ada akun. Buat akun dulu di app Celengan.')
+    return
   }
-  return `Hi! Your Telegram username isn't registered in Celengan yet.\n\nOpen the Celengan app → Settings → Telegram Integration, and enter your Telegram username to get started.`
+  const totalBalance = accounts.reduce((sum, a) => sum + a.balance, 0)
+  const lines = accounts.map(a => `• ${a.name}: ${formatCurrency(a.balance)}`)
+  await telegramReply(
+    chatId,
+    `*💰 Saldo Akunmu:*\n${lines.join('\n')}\n\n*Total: ${formatCurrency(totalBalance)}*`
+  )
 }
 
-function getClarificationRequest(lang: 'id' | 'en'): string {
-  if (lang === 'id') {
-    return `Maaf, saya tidak mengerti pesanmu. Coba kirim seperti:\n• "Beli kopi 25rb"\n• "Gajian 5jt"\n• "Bayar listrik 150rb"\n• Ketik /bantuan untuk info lebih lanjut`
+async function handleTransaksi(
+  chatId: number,
+  userId: string,
+  supabase: ReturnType<typeof createServiceClient>
+): Promise<void> {
+  const monthStart = new Date()
+  monthStart.setDate(1)
+  const { data: txRows } = await supabase
+    .from('transactions')
+    .select('description, amount, type, date, account_id')
+    .eq('user_id', userId)
+    .gte('date', monthStart.toISOString().slice(0, 10))
+    .order('date', { ascending: false })
+    .limit(15)
+
+  if (!txRows || txRows.length === 0) {
+    await telegramReply(chatId, '*📋 Transaksi Bulan Ini:*\n\nBelum ada transaksi.')
+    return
   }
-  return `Sorry, I didn't understand that. Try sending:\n• "Coffee 25000"\n• "Salary 5000000"\n• "Electric bill 150000"\n• Type /help for more info`
+
+  const lines = txRows.map(
+    t => `• ${t.date}: ${t.description} ${t.type === 'spending' ? '➖' : '➕'}${formatCurrency(t.amount)}`
+  )
+  await telegramReply(chatId, `*📋 Transaksi Bulan Ini:*\n${lines.join('\n')}`)
 }
 
-function getHelpMessage(lang: 'id' | 'en', accounts: Array<{ name: string }>): string {
-  const acctList = accounts.map(a => `• ${a.name}`).join('\n')
-  if (lang === 'id') {
-    return `*Celengan Bot* - Catat transaksi via Telegram\n\n*Contoh pesan:*\n• "Beli makan siang 35rb"\n• "Gajian 6jt"\n• "Bayar listrik 150rb dari BRI"\n\n*Akunmu:*\n${acctList || '(Belum ada akun)'}\n\n*Perintah:*\n• /saldo - lihat saldo\n• /transaksi - transaksi bulan ini`
+async function handleAkun(
+  chatId: number,
+  accounts: Account[],
+  defaultAccountId: string | null
+): Promise<void> {
+  if (accounts.length === 0) {
+    await telegramReply(chatId, 'Belum ada akun. Buat akun dulu di app Celengan.')
+    return
   }
-  return `*Celengan Bot* - Log transactions via Telegram\n\n*Example messages:*\n• "Lunch 35000"\n• "Salary 6000000"\n• "Electric bill 150000 from BRI"\n\n*Your accounts:*\n${acctList || '(No accounts yet)'}\n\n*Commands:*\n• /balance - view balances\n• /transactions - this month's transactions`
+  const lines = accounts.map((a, i) => {
+    const isDefault = a.id === defaultAccountId
+    return `${i + 1}. ${a.name}${isDefault ? ' ✅ *(default)*' : ''}`
+  })
+  await telegramReply(
+    chatId,
+    `*🏦 Akun Kamu:*\n${lines.join('\n')}\n\nBalas dengan nomor akun (contoh: \`1\`) untuk set akun default.\nAkun default dipakai jika kamu tidak menyebut akun saat catat transaksi.`
+  )
+}
+
+async function handleSetDefault(
+  chatId: number,
+  username: string,
+  userId: string,
+  accounts: Account[],
+  input: string,
+  supabase: ReturnType<typeof createServiceClient>
+): Promise<void> {
+  const num = parseInt(input.trim(), 10)
+  if (isNaN(num) || num < 1 || num > accounts.length) {
+    await telegramReply(chatId, `Nomor tidak valid. Kirim angka 1–${accounts.length}.`)
+    return
+  }
+  const chosen = accounts[num - 1]
+  await supabase
+    .from('settings')
+    .update({ telegram_default_account_id: chosen.id })
+    .eq('user_id', userId)
+  await telegramReply(chatId, `✅ Akun default diset ke *${chosen.name}*.`)
+}
+
+function getHelpMessage(accounts: Account[], defaultAccountId: string | null): string {
+  const defaultName = accounts.find(a => a.id === defaultAccountId)?.name ?? '(belum diset)'
+  return (
+    `*🐷 Celengan Bot*\n\n` +
+    `*Catat transaksi:*\n` +
+    `• \`kopi 25rb\` — pengeluaran\n` +
+    `• \`gajian 5jt\` — pemasukan\n` +
+    `• \`listrik 150rb bca\` — pakai akun tertentu\n\n` +
+    `*Perintah:*\n` +
+    `• /saldo — lihat semua saldo\n` +
+    `• /transaksi — transaksi bulan ini\n` +
+    `• /akun — lihat & ganti akun default\n` +
+    `• /bantuan — pesan ini\n\n` +
+    `*Akun default sekarang:* ${defaultName}`
+  )
+}
+
+function getSetupInstructions(): string {
+  return (
+    `Halo! Username Telegram kamu belum terdaftar di Celengan.\n\n` +
+    `Buka aplikasi Celengan → Settings → Telegram Integration, lalu masukkan username Telegram kamu untuk mulai.`
+  )
 }
 
 // ─── POST handler — incoming Telegram updates ─────────────────────────────────
@@ -45,47 +129,36 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     const body = await req.json()
 
-    // Telegram sends updates with a message object
     const message = body?.message
-    if (!message) {
-      return NextResponse.json({ ok: true })
-    }
-
-    // Only handle text messages
-    if (!message.text) {
+    if (!message || !message.text) {
       return NextResponse.json({ ok: true })
     }
 
     const chatId: number = message.chat.id
     const username: string | undefined = message.from?.username
-    const messageBody: string = message.text ?? ''
-
-    if (!messageBody) {
-      return NextResponse.json({ ok: true })
-    }
-
-    const langGuess = /[a-zA-Z]/.test(messageBody) ? 'en' : 'id'
+    const messageBody: string = message.text.trim()
 
     if (!username) {
-      await telegramReply(chatId, getSetupInstructions(langGuess as 'id' | 'en'))
+      await telegramReply(chatId, getSetupInstructions())
       return NextResponse.json({ ok: true })
     }
 
     const supabase = createServiceClient()
 
-    // 1. Look up user by Telegram username in settings table
+    // 1. Look up user by Telegram username
     const { data: settingsRow, error: lookupError } = await supabase
       .from('settings')
-      .select('user_id')
+      .select('user_id, telegram_default_account_id')
       .eq('telegram_username', username)
       .single()
 
     if (lookupError || !settingsRow) {
-      await telegramReply(chatId, getSetupInstructions(langGuess as 'id' | 'en'))
+      await telegramReply(chatId, getSetupInstructions())
       return NextResponse.json({ ok: true })
     }
 
     const userId = settingsRow.user_id
+    const defaultAccountId: string | null = settingsRow.telegram_default_account_id ?? null
 
     // 2. Fetch user's accounts
     const { data: accountRows } = await supabase
@@ -94,74 +167,78 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       .eq('user_id', userId)
       .order('name')
 
-    const accounts = accountRows ?? []
+    const accounts: Account[] = accountRows ?? []
 
-    // 3. Parse message with Gemini
+    // 3. Handle explicit slash commands first
+    const cmd = messageBody.toLowerCase().split(' ')[0]
+
+    if (cmd === '/saldo' || cmd === '/balance') {
+      await handleSaldo(chatId, accounts)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (cmd === '/transaksi' || cmd === '/transactions') {
+      await handleTransaksi(chatId, userId, supabase)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (cmd === '/akun' || cmd === '/accounts') {
+      await handleAkun(chatId, accounts, defaultAccountId)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (cmd === '/bantuan' || cmd === '/help' || cmd === '/start') {
+      await telegramReply(chatId, getHelpMessage(accounts, defaultAccountId))
+      return NextResponse.json({ ok: true })
+    }
+
+    // 4. Check if user is replying with a number to set default account
+    //    (bare number 1–N, no other text)
+    if (/^\d+$/.test(messageBody) && accounts.length > 0) {
+      await handleSetDefault(chatId, username, userId, accounts, messageBody, supabase)
+      return NextResponse.json({ ok: true })
+    }
+
+    // 5. Parse as natural language transaction with Gemini
     let intent: TransactionIntent
     try {
       intent = await parseTransactionMessage(messageBody, accounts)
     } catch (err) {
       console.error('Gemini parse error:', err)
-      await telegramReply(chatId, getClarificationRequest('en'))
+      await telegramReply(
+        chatId,
+        `Maaf, tidak bisa memproses pesan. Coba lagi atau ketik /bantuan.`
+      )
       return NextResponse.json({ ok: true })
     }
 
     const lang = intent.language
 
-    // 4. Handle intent types
     if (intent.type === 'unclear') {
-      await telegramReply(chatId, getClarificationRequest(lang))
+      await telegramReply(
+        chatId,
+        lang === 'id'
+          ? `Maaf, tidak mengerti. Contoh: "kopi 25rb", "gajian 5jt"\nKetik /bantuan untuk info lengkap.`
+          : `Sorry, didn't understand. Example: "coffee 25000", "salary 5000000"\nType /help for more info.`
+      )
       return NextResponse.json({ ok: true })
     }
 
     if (intent.type === 'query') {
       if (intent.query_type === 'help') {
-        await telegramReply(chatId, getHelpMessage(lang, accounts))
-        return NextResponse.json({ ok: true })
+        await telegramReply(chatId, getHelpMessage(accounts, defaultAccountId))
+      } else if (intent.query_type === 'balance') {
+        await handleSaldo(chatId, accounts)
+      } else if (intent.query_type === 'transactions') {
+        await handleTransaksi(chatId, userId, supabase)
       }
-
-      if (intent.query_type === 'balance') {
-        const totalBalance = accounts.reduce((sum, a) => sum + a.balance, 0)
-        const lines = accounts.map(a => `• ${a.name}: ${formatCurrency(a.balance)}`)
-        const total = `\n*Total: ${formatCurrency(totalBalance)}*`
-        await telegramReply(
-          chatId,
-          lang === 'id'
-            ? `*Saldo Akunmu:*\n${lines.join('\n')}${total}`
-            : `*Your Account Balances:*\n${lines.join('\n')}${total}`
-        )
-        return NextResponse.json({ ok: true })
-      }
-
-      if (intent.query_type === 'transactions') {
-        const monthStart = new Date()
-        monthStart.setDate(1)
-        const { data: txRows } = await supabase
-          .from('transactions')
-          .select('description, amount, type, date')
-          .eq('user_id', userId)
-          .gte('date', monthStart.toISOString().slice(0, 10))
-          .order('date', { ascending: false })
-          .limit(10)
-        const txList = (txRows ?? [])
-          .map(
-            t =>
-              `• ${t.date}: ${t.description} ${t.type === 'spending' ? '-' : '+'}${formatCurrency(t.amount)}`
-          )
-          .join('\n')
-        await telegramReply(
-          chatId,
-          lang === 'id'
-            ? `*Transaksi Bulan Ini:*\n${txList || 'Belum ada transaksi.'}`
-            : `*This Month's Transactions:*\n${txList || 'No transactions yet.'}`
-        )
-        return NextResponse.json({ ok: true })
-      }
+      return NextResponse.json({ ok: true })
     }
 
     if (intent.type === 'spending' || intent.type === 'income') {
-      // 5. Resolve account_id if account_name was mentioned
+      // 6. Resolve account: explicit mention > default > null
       let accountId: string | null = null
+
       if (intent.account_name) {
         const normalised = intent.account_name.toLowerCase()
         const matched = accounts.find(
@@ -172,7 +249,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         if (matched) accountId = matched.id
       }
 
-      // 6. Insert transaction
+      if (!accountId && defaultAccountId) {
+        accountId = defaultAccountId
+      }
+
+      // 7. Insert transaction
       const today = new Date().toISOString().slice(0, 10)
       const { error: insertError } = await supabase.from('transactions').insert({
         user_id: userId,
@@ -189,35 +270,34 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         await telegramReply(
           chatId,
           lang === 'id'
-            ? 'Maaf, terjadi kesalahan saat menyimpan transaksi. Coba lagi.'
-            : 'Sorry, there was an error saving the transaction. Please try again.'
+            ? 'Gagal menyimpan transaksi. Coba lagi.'
+            : 'Failed to save transaction. Please try again.'
         )
         return NextResponse.json({ ok: true })
       }
 
-      // 7. Build confirmation reply
+      // 8. Confirmation reply
       const emoji = intent.type === 'spending' ? '💸' : '💰'
-      const verb =
-        intent.type === 'spending'
-          ? lang === 'id' ? 'Pengeluaran' : 'Spending'
-          : lang === 'id' ? 'Pemasukan' : 'Income'
+      const verb = intent.type === 'spending'
+        ? lang === 'id' ? 'Pengeluaran' : 'Spending'
+        : lang === 'id' ? 'Pemasukan' : 'Income'
       const acctName = accountId ? accounts.find(a => a.id === accountId)?.name ?? '' : ''
-      const acctLine = acctName ? `\nAkun: ${acctName}` : ''
-      const catLine = intent.category ? `\nKategori: ${intent.category}` : ''
+      const acctLine = acctName ? `\n🏦 Akun: ${acctName}` : '\n🏦 Akun: _(tidak ada)_'
+      const catLine = intent.category ? `\n🏷 Kategori: ${intent.category}` : ''
 
       await telegramReply(
         chatId,
-        `${emoji} ${verb} dicatat!\n` +
-          `${intent.description}\n` +
-          `${formatCurrency(intent.amount)}` +
+        `${emoji} *${verb} dicatat!*\n` +
+          `📝 ${intent.description}\n` +
+          `💵 ${formatCurrency(intent.amount)}` +
           acctLine +
           catLine +
-          `\n\n_${lang === 'id' ? 'Lihat detail di app Celengan' : 'View details in the Celengan app'}_`
+          `\n\n_Lihat detail di app Celengan_`
       )
       return NextResponse.json({ ok: true })
     }
 
-    await telegramReply(chatId, getClarificationRequest(lang))
+    await telegramReply(chatId, `Tidak mengerti. Ketik /bantuan untuk daftar perintah.`)
     return NextResponse.json({ ok: true })
   } catch (error) {
     console.error('Telegram webhook error:', error)
