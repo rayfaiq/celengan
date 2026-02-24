@@ -375,7 +375,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           `💵 ${formatCurrency(intent.amount)}` +
           acctLine +
           catLine +
-          `\n\n_Lihat detail di app Celengan_`
+          `\n\n_[Lihat detail di app Celengan](${process.env.NEXT_PUBLIC_APP_URL ?? 'https://celengan-teal.vercel.app'})_`
       )
       return NextResponse.json({ ok: true })
     }
