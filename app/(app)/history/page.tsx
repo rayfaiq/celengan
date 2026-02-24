@@ -19,6 +19,7 @@ export default async function HistoryPage() {
     type: a.type,
     category: a.category,
     balance: a.balance,
+    balance_mode: a.balance_mode as 'manual' | 'auto',
   }))
 
   // Fetch all balance history with account information
