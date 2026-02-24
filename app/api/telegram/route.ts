@@ -19,6 +19,62 @@ async function telegramReply(chatId: number, message: string): Promise<void> {
 
 type Account = { id: string; name: string; balance: number; type: string; category: string }
 
+// ─── Regex fallback parser (used when Gemini is unavailable) ─────────────────
+// Handles patterns: "[desc] [amount][suffix] [?account]"
+// e.g. "kopi 25rb", "gajian 5jt bca", "listrik 150000"
+function parseTransactionFallback(
+  message: string,
+  accounts: Account[]
+): import('@/lib/gemini').TransactionIntent | null {
+  const s = message.trim().toLowerCase()
+
+  // Amount pattern: number + optional suffix
+  const amountRe = /(\d+(?:[.,]\d+)?)\s*(jt|juta|rb|ribu|k)?/
+  const match = s.match(amountRe)
+  if (!match) return null
+
+  const raw = match[1].replace(',', '.')
+  let amount = parseFloat(raw)
+  const suffix = match[2]
+  if (suffix === 'jt' || suffix === 'juta') amount *= 1_000_000
+  else if (suffix === 'rb' || suffix === 'ribu' || suffix === 'k') amount *= 1_000
+  amount = Math.round(amount)
+  if (!amount) return null
+
+  // Everything before the amount = description
+  const beforeAmount = s.slice(0, match.index!).trim()
+  const description = beforeAmount || 'Transaksi'
+
+  // Everything after amount = possible account name
+  const afterAmount = s.slice(match.index! + match[0].length).trim()
+  let account_name: string | null = null
+  if (afterAmount) {
+    const found = accounts.find(
+      a =>
+        a.name.toLowerCase().includes(afterAmount) ||
+        afterAmount.includes(a.name.toLowerCase())
+    )
+    if (found) account_name = found.name
+  }
+
+  // Income keywords
+  const incomeKeywords = ['gaji', 'gajian', 'salary', 'income', 'pemasukan', 'bonus', 'dapat', 'terima', 'received']
+  const isIncome = incomeKeywords.some(k => description.includes(k))
+
+  const lang: 'id' | 'en' = /[a-zA-Z]/.test(message) ? 'en' : 'id'
+
+  return {
+    type: isIncome ? 'income' : 'spending',
+    amount,
+    description: beforeAmount
+      ? beforeAmount.charAt(0).toUpperCase() + beforeAmount.slice(1)
+      : 'Transaksi',
+    category: null,
+    account_name,
+    language: lang,
+  }
+}
+
 // ─── Slash command handlers ───────────────────────────────────────────────────
 
 async function handleSaldo(chatId: number, accounts: Account[]): Promise<void> {
@@ -282,17 +338,24 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ ok: true })
     }
 
-    // 5. Parse as natural language transaction with Gemini
+    // 5. Parse as natural language transaction with Gemini, fallback to regex
     let intent: TransactionIntent
+    let usedFallback = false
     try {
       intent = await parseTransactionMessage(messageBody, accounts)
     } catch (err) {
       console.error('Gemini parse error:', err)
-      await telegramReply(
-        chatId,
-        `Maaf, tidak bisa memproses pesan. Coba lagi atau ketik /bantuan.`
-      )
-      return NextResponse.json({ ok: true })
+      const fallback = parseTransactionFallback(messageBody, accounts)
+      if (fallback) {
+        intent = fallback
+        usedFallback = true
+      } else {
+        await telegramReply(
+          chatId,
+          `Maaf, AI sedang tidak tersedia dan format pesan tidak dikenali.\nCoba: "kopi 25rb" atau "gajian 5jt"`
+        )
+        return NextResponse.json({ ok: true })
+      }
     }
 
     const lang = intent.language
@@ -368,6 +431,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       const acctLine = acctName ? `\n🏦 Akun: ${acctName}` : '\n🏦 Akun: _(tidak ada)_'
       const catLine = intent.category ? `\n🏷 Kategori: ${intent.category}` : ''
 
+      const fallbackNote = usedFallback ? `\n⚠️ _AI offline, parsed via regex_` : ''
       await telegramReply(
         chatId,
         `${emoji} *${verb} dicatat!*\n` +
@@ -375,6 +439,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           `💵 ${formatCurrency(intent.amount)}` +
           acctLine +
           catLine +
+          fallbackNote +
           `\n\n_[Lihat detail di app Celengan](${process.env.NEXT_PUBLIC_APP_URL ?? 'https://celengan-teal.vercel.app'})_`
       )
       return NextResponse.json({ ok: true })
