@@ -13,8 +13,8 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Trash2, Pencil } from 'lucide-react'
-import { updateBalance, createAccount, deleteAccount } from '@/app/actions/accounts'
+import { Plus, Trash2, Pencil, RefreshCw } from 'lucide-react'
+import { updateBalance, createAccount, deleteAccount, updateAccountMode } from '@/app/actions/accounts'
 import { formatIDR } from '@/lib/calculations'
 import { AmountInput } from '@/components/AmountInput'
 import type { Account } from '@/lib/calculations'
@@ -27,6 +27,9 @@ export function AccountsClient({ accounts }: { accounts: Account[] }) {
   const [newName, setNewName] = useState('')
   const [newType, setNewType] = useState<'cash' | 'investment'>('cash')
   const [newCategory, setNewCategory] = useState<'core' | 'satellite'>('core')
+  const [newBalanceMode, setNewBalanceMode] = useState<'manual' | 'auto'>('manual')
+  const [modeEditAccount, setModeEditAccount] = useState<Account | null>(null)
+  const [modeEditOpen, setModeEditOpen] = useState(false)
 
   function handleUpdateBalance(account: Account) {
     if (newBalance == null) return
@@ -45,9 +48,10 @@ export function AccountsClient({ accounts }: { accounts: Account[] }) {
     if (!newName.trim()) return
     startTransition(async () => {
       try {
-        await createAccount({ name: newName.trim(), type: newType, category: newCategory })
+        await createAccount({ name: newName.trim(), type: newType, category: newCategory, balance_mode: newBalanceMode })
         setAddOpen(false)
         setNewName('')
+        setNewBalanceMode('manual')
       } catch (e) {
         alert('Failed to create account: ' + (e instanceof Error ? e.message : String(e)))
       }
@@ -57,6 +61,18 @@ export function AccountsClient({ accounts }: { accounts: Account[] }) {
   function handleDelete(id: string) {
     if (!confirm('Delete this account and all its history?')) return
     startTransition(async () => { await deleteAccount(id) })
+  }
+
+  function handleModeChange(account: Account, mode: 'manual' | 'auto') {
+    startTransition(async () => {
+      try {
+        await updateAccountMode(account.id, mode)
+        setModeEditOpen(false)
+        setModeEditAccount(null)
+      } catch (e) {
+        alert('Failed to update mode: ' + (e instanceof Error ? e.message : String(e)))
+      }
+    })
   }
 
   return (
@@ -121,6 +137,30 @@ export function AccountsClient({ accounts }: { accounts: Account[] }) {
                   ))}
                 </div>
               </div>
+              <div className="space-y-2">
+                <Label>Balance Mode</Label>
+                <div className="flex gap-2">
+                  {(['manual', 'auto'] as const).map(m => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setNewBalanceMode(m)}
+                      className={`flex-1 py-2 rounded-md text-sm border transition-colors ${
+                        newBalanceMode === m
+                          ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400'
+                          : 'border-border text-muted-foreground'
+                      }`}
+                    >
+                      {m === 'manual' ? 'Manual' : 'Auto'}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {newBalanceMode === 'auto'
+                    ? 'Balance updates automatically when you add/delete transactions'
+                    : 'Update balance manually via "Update Balance"'}
+                </p>
+              </div>
               <Button onClick={handleCreate} className="w-full" disabled={isPending}>
                 Create
               </Button>
@@ -128,6 +168,43 @@ export function AccountsClient({ accounts }: { accounts: Account[] }) {
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* Change Mode Dialog */}
+      <Dialog open={modeEditOpen} onOpenChange={open => {
+        setModeEditOpen(open)
+        if (!open) setModeEditAccount(null)
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Balance Mode — {modeEditAccount?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            <p className="text-sm text-muted-foreground">
+              Current mode: <strong>{modeEditAccount?.balance_mode}</strong>
+            </p>
+            {(['manual', 'auto'] as const).map(m => (
+              <button
+                key={m}
+                type="button"
+                disabled={isPending || modeEditAccount?.balance_mode === m}
+                onClick={() => modeEditAccount && handleModeChange(modeEditAccount, m)}
+                className={`w-full py-3 rounded-md text-sm border transition-colors text-left px-4 ${
+                  modeEditAccount?.balance_mode === m
+                    ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400 cursor-default'
+                    : 'border-border text-muted-foreground hover:bg-muted'
+                }`}
+              >
+                <span className="font-medium block">{m === 'manual' ? 'Manual' : 'Auto'}</span>
+                <span className="text-xs">
+                  {m === 'auto'
+                    ? 'Balance adjusts automatically from transactions'
+                    : 'Update balance manually'}
+                </span>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {accounts.length === 0 && (
         <p className="text-muted-foreground text-sm text-center py-12">
@@ -148,7 +225,7 @@ export function AccountsClient({ accounts }: { accounts: Account[] }) {
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
-              <div className="flex gap-1">
+              <div className="flex gap-1 flex-wrap">
                 <Badge variant="outline" className="text-xs">
                   {account.type}
                 </Badge>
@@ -160,47 +237,73 @@ export function AccountsClient({ accounts }: { accounts: Account[] }) {
                 >
                   {account.category}
                 </Badge>
+                <Badge
+                  variant="outline"
+                  className={`text-xs ${
+                    account.balance_mode === 'auto'
+                      ? 'text-blue-400 border-blue-400/30'
+                      : 'text-muted-foreground'
+                  }`}
+                >
+                  {account.balance_mode === 'auto' ? 'Auto' : 'Manual'}
+                </Badge>
               </div>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold mb-3">{formatIDR(account.balance)}</p>
-              <Dialog
-                open={editAccount?.id === account.id}
-                onOpenChange={open => {
-                  if (open) {
-                    setEditAccount(account)
-                    setNewBalance(account.balance)
-                  } else {
-                    setEditAccount(null)
-                    setNewBalance(null)
-                  }
+              <p className="text-2xl font-bold mb-2">{formatIDR(account.balance)}</p>
+              <button
+                onClick={() => {
+                  setModeEditAccount(account)
+                  setModeEditOpen(true)
                 }}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors mb-3 flex items-center gap-1"
               >
-                <DialogTrigger asChild>
-                  <Button variant="outline" size="sm" className="w-full">
-                    <Pencil className="h-3 w-3 mr-2" />
-                    Update Balance
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Update {account.name}</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4 pt-2">
-                    <div className="space-y-2">
-                      <Label>New Balance (IDR)</Label>
-                      <AmountInput key={account.id} value={newBalance} onChange={setNewBalance} autoFocus />
-                    </div>
-                    <Button
-                      onClick={() => handleUpdateBalance(account)}
-                      className="w-full"
-                      disabled={isPending}
-                    >
-                      Save Balance
+                <RefreshCw className="h-3 w-3" />
+                Change Mode
+              </button>
+              {account.balance_mode === 'manual' ? (
+                <Dialog
+                  open={editAccount?.id === account.id}
+                  onOpenChange={open => {
+                    if (open) {
+                      setEditAccount(account)
+                      setNewBalance(account.balance)
+                    } else {
+                      setEditAccount(null)
+                      setNewBalance(null)
+                    }
+                  }}
+                >
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="sm" className="w-full">
+                      <Pencil className="h-3 w-3 mr-2" />
+                      Update Balance
                     </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Update {account.name}</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 pt-2">
+                      <div className="space-y-2">
+                        <Label>New Balance (IDR)</Label>
+                        <AmountInput key={account.id} value={newBalance} onChange={setNewBalance} autoFocus />
+                      </div>
+                      <Button
+                        onClick={() => handleUpdateBalance(account)}
+                        className="w-full"
+                        disabled={isPending}
+                      >
+                        Save Balance
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              ) : (
+                <p className="text-xs text-muted-foreground text-center py-1 border border-dashed border-border rounded-md">
+                  Balance auto-updates from transactions
+                </p>
+              )}
             </CardContent>
           </Card>
         ))}

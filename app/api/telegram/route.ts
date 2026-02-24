@@ -17,7 +17,7 @@ async function telegramReply(chatId: number, message: string): Promise<void> {
   })
 }
 
-type Account = { id: string; name: string; balance: number; type: string; category: string }
+type Account = { id: string; name: string; balance: number; type: string; category: string; balance_mode: string }
 
 // ─── Regex fallback parser (used when Gemini is unavailable) ─────────────────
 // Handles patterns: "[desc] [amount][suffix] [?account]"
@@ -293,7 +293,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // 2. Fetch user's accounts
     const { data: accountRows } = await supabase
       .from('accounts')
-      .select('id, name, balance, type, category')
+      .select('id, name, balance, type, category, balance_mode')
       .eq('user_id', userId)
       .order('name')
 
@@ -422,13 +422,46 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         return NextResponse.json({ ok: true })
       }
 
+      // 7b. Auto-mode: adjust account balance and insert balance_history snapshot
+      let balanceAfter: number | null = null
+      if (accountId) {
+        const linkedAccount = accounts.find(a => a.id === accountId)
+        if (linkedAccount && linkedAccount.balance_mode === 'auto') {
+          const delta = intent.type === 'income' ? intent.amount : -intent.amount
+          balanceAfter = linkedAccount.balance + delta
+
+          await supabase
+            .from('accounts')
+            .update({ balance: balanceAfter, updated_at: new Date().toISOString() })
+            .eq('id', accountId)
+            .eq('user_id', userId)
+
+          await supabase.from('balance_history').insert({
+            account_id: accountId,
+            balance_at_time: balanceAfter,
+            previous_balance: linkedAccount.balance,
+          })
+        }
+      }
+
       // 8. Confirmation reply
       const emoji = intent.type === 'spending' ? '💸' : '💰'
       const verb = intent.type === 'spending'
         ? lang === 'id' ? 'Pengeluaran' : 'Spending'
         : lang === 'id' ? 'Pemasukan' : 'Income'
-      const acctName = accountId ? accounts.find(a => a.id === accountId)?.name ?? '' : ''
-      const acctLine = acctName ? `\n🏦 Akun: ${acctName}` : '\n🏦 Akun: _(tidak ada)_'
+
+      const linkedAccount = accountId ? accounts.find(a => a.id === accountId) : null
+      const acctName = linkedAccount?.name ?? ''
+
+      let acctLine: string
+      if (!acctName) {
+        acctLine = `\n🏦 Akun: _(tidak ada)_`
+      } else if (linkedAccount?.balance_mode === 'auto' && balanceAfter !== null) {
+        acctLine = `\n🏦 ${acctName}: ${formatCurrency(linkedAccount.balance)} → ${formatCurrency(balanceAfter)}`
+      } else {
+        acctLine = `\n🏦 Akun: ${acctName}`
+      }
+
       const catLine = intent.category ? `\n🏷 Kategori: ${intent.category}` : ''
 
       const fallbackNote = usedFallback ? `\n⚠️ _AI offline, parsed via regex_` : ''

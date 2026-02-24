@@ -4,6 +4,7 @@ export type Account = {
   type: 'cash' | 'investment'
   category: 'core' | 'satellite'
   balance: number
+  balance_mode: 'manual' | 'auto'
 }
 
 export type BalanceHistoryRow = {

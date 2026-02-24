@@ -44,6 +44,7 @@ export default async function DashboardPage() {
     type: a.type,
     category: a.category,
     balance: a.balance,
+    balance_mode: a.balance_mode as 'manual' | 'auto',
   }))
 
   const netWorth = calcNetWorth(accounts)

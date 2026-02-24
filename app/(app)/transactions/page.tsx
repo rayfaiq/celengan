@@ -24,6 +24,7 @@ export default async function TransactionsPage({
 
   const accounts = (accountRows ?? []).map(a => ({
     id: a.id, name: a.name, type: a.type, category: a.category, balance: a.balance,
+    balance_mode: a.balance_mode as 'manual' | 'auto',
   })) as Account[]
 
   // Build transaction query — filter by account if provided

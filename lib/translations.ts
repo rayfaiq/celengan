@@ -37,6 +37,13 @@ export const translations = {
     investment: 'Investasi',
     core: 'Inti',
     satellite: 'Satelit',
+
+    // Balance Mode
+    balanceMode: 'Mode Saldo',
+    balanceModeManual: 'Manual',
+    balanceModeAuto: 'Otomatis',
+    balanceModeManualDesc: 'Perbarui saldo secara manual',
+    balanceModeAutoDesc: 'Saldo diperbarui otomatis dari transaksi',
   },
   en: {
     // Navigation
@@ -74,6 +81,13 @@ export const translations = {
     investment: 'Investment',
     core: 'Core',
     satellite: 'Satellite',
+
+    // Balance Mode
+    balanceMode: 'Balance Mode',
+    balanceModeManual: 'Manual',
+    balanceModeAuto: 'Auto',
+    balanceModeManualDesc: 'Update balance manually',
+    balanceModeAutoDesc: 'Balance updates automatically from transactions',
   },
 }
 

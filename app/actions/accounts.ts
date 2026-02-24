@@ -41,6 +41,7 @@ export async function createAccount(data: {
   name: string
   type: 'cash' | 'investment'
   category: 'core' | 'satellite'
+  balance_mode?: 'manual' | 'auto'
 }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -48,7 +49,24 @@ export async function createAccount(data: {
 
   const { error } = await supabase
     .from('accounts')
-    .insert({ ...data, user_id: user.id, balance: 0 })
+    .insert({ ...data, user_id: user.id, balance: 0, balance_mode: data.balance_mode ?? 'manual' })
+
+  if (error) throw error
+
+  revalidatePath('/accounts')
+  revalidatePath('/dashboard')
+}
+
+export async function updateAccountMode(accountId: string, balance_mode: 'manual' | 'auto') {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Unauthorized')
+
+  const { error } = await supabase
+    .from('accounts')
+    .update({ balance_mode })
+    .eq('id', accountId)
+    .eq('user_id', user.id)
 
   if (error) throw error
 

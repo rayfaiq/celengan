@@ -18,6 +18,7 @@ export default async function AccountsPage() {
     type: a.type,
     category: a.category,
     balance: a.balance,
+    balance_mode: a.balance_mode as 'manual' | 'auto',
   }))
 
   return <AccountsClient accounts={accounts} />
