@@ -24,6 +24,8 @@ DECLARE
   v_transactions_current_month jsonb;
   v_budget_spent_this_month bigint;
   v_budget_rollover bigint;
+  v_budget_past_month_count bigint;
+  v_budget_past_total_spent bigint;
 BEGIN
   -- Settings (with auto-creation)
   SELECT * INTO v_settings FROM public.settings WHERE user_id = p_user_id;
@@ -69,7 +71,9 @@ BEGIN
     AND date >= date_trunc('month', current_date);
 
   -- Budget: rollover from all previous months
-  SELECT coalesce(sum(v_settings.monthly_budget - month_spent), 0) INTO v_budget_rollover
+  -- rollover = (number_of_past_months * monthly_budget) - total_past_spent
+  SELECT count(*), coalesce(sum(month_spent), 0)
+  INTO v_budget_past_month_count, v_budget_past_total_spent
   FROM (
     SELECT date_trunc('month', date) AS month,
            coalesce(sum(amount), 0) AS month_spent
@@ -80,6 +84,8 @@ BEGIN
       AND date < date_trunc('month', current_date)
     GROUP BY date_trunc('month', date)
   ) past_months;
+
+  v_budget_rollover := (v_budget_past_month_count * v_settings.monthly_budget) - v_budget_past_total_spent;
 
   -- Account Deltas
   WITH ranked_snapshots AS (
