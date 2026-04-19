@@ -102,6 +102,52 @@ function parseAmount(raw: string): number | null {
   return Math.round(num)
 }
 
+function parseSpentCommand(
+  message: string,
+  accounts: Account[]
+): { amount: number; accountName: string | null; description: string } | null {
+  // Format: /spent <amount> [from <account>] [for <description>]
+  const text = message.replace(/^\/spent\s*/i, '').trim()
+  if (!text) return null
+
+  // Extract amount (first token with optional suffix)
+  const amountMatch = text.match(/^(\d+(?:[.,]\d+)?)\s*(jt|juta|rb|ribu|k)?/i)
+  if (!amountMatch) return null
+
+  const raw = amountMatch[1].replace(',', '.')
+  let amount = parseFloat(raw)
+  const suffix = amountMatch[2]?.toLowerCase()
+  if (suffix === 'jt' || suffix === 'juta') amount *= 1_000_000
+  else if (suffix === 'rb' || suffix === 'ribu' || suffix === 'k') amount *= 1_000
+  amount = Math.round(amount)
+  if (!amount) return null
+
+  const rest = text.slice(amountMatch[0].length).trim()
+
+  // Extract "from <account>"
+  let accountName: string | null = null
+  let remaining = rest
+  const fromMatch = remaining.match(/\bfrom\s+(\S+)/i)
+  if (fromMatch) {
+    const query = fromMatch[1].toLowerCase()
+    const matched = accounts.find(
+      a => a.name.toLowerCase().includes(query) || query.includes(a.name.toLowerCase())
+    )
+    if (matched) accountName = matched.name
+    remaining = remaining.replace(fromMatch[0], '').trim()
+  }
+
+  // Extract "for <description>"
+  let description = 'Budget spending'
+  const forMatch = remaining.match(/\bfor\s+(.+)/i)
+  if (forMatch) {
+    description = forMatch[1].trim()
+    description = description.charAt(0).toUpperCase() + description.slice(1)
+  }
+
+  return { amount, accountName, description }
+}
+
 async function handleSaldoSet(
   chatId: number,
   userId: string,
@@ -229,6 +275,114 @@ async function handleSetDefault(
   await telegramReply(chatId, `✅ Akun default diset ke *${chosen.name}*.`)
 }
 
+async function handleSpent(
+  chatId: number,
+  userId: string,
+  accounts: Account[],
+  defaultAccountId: string | null,
+  messageBody: string,
+  supabase: ReturnType<typeof createServiceClient>
+): Promise<void> {
+  const parsed = parseSpentCommand(messageBody, accounts)
+  if (!parsed) {
+    await telegramReply(
+      chatId,
+      `Format: /spent <jumlah> [from <akun>] [for <deskripsi>]\nContoh: /spent 400k from mandiri for buy games`
+    )
+    return
+  }
+
+  // Resolve account
+  let accountId: string | null = null
+  let linkedAccount: Account | null = null
+  if (parsed.accountName) {
+    const normalised = parsed.accountName.toLowerCase()
+    linkedAccount = accounts.find(
+      a => a.name.toLowerCase().includes(normalised) || normalised.includes(a.name.toLowerCase())
+    ) ?? null
+    if (linkedAccount) accountId = linkedAccount.id
+  }
+  if (!accountId && defaultAccountId) {
+    accountId = defaultAccountId
+    linkedAccount = accounts.find(a => a.id === defaultAccountId) ?? null
+  }
+
+  // Insert transaction with is_budget=true
+  const today = new Date().toISOString().slice(0, 10)
+  const { error: insertError } = await supabase.from('transactions').insert({
+    user_id: userId,
+    account_id: accountId,
+    description: parsed.description,
+    amount: parsed.amount,
+    category: null,
+    date: today,
+    type: 'spending',
+    is_budget: true,
+  })
+
+  if (insertError) {
+    console.error('Budget transaction insert error:', insertError)
+    await telegramReply(chatId, 'Gagal menyimpan. Coba lagi.')
+    return
+  }
+
+  // Auto-mode: adjust balance
+  let balanceAfter: number | null = null
+  if (linkedAccount && linkedAccount.balance_mode === 'auto') {
+    balanceAfter = linkedAccount.balance - parsed.amount
+
+    await supabase
+      .from('accounts')
+      .update({ balance: balanceAfter, updated_at: new Date().toISOString() })
+      .eq('id', linkedAccount.id)
+      .eq('user_id', userId)
+
+    await supabase.from('balance_history').insert({
+      account_id: linkedAccount.id,
+      balance_at_time: balanceAfter,
+      previous_balance: linkedAccount.balance,
+    })
+  }
+
+  // Get budget remaining for confirmation
+  const { data: settings } = await supabase
+    .from('settings')
+    .select('monthly_budget')
+    .eq('user_id', userId)
+    .single()
+
+  const monthlyBudget = (settings?.monthly_budget as number) ?? 0
+
+  const monthStart = new Date()
+  monthStart.setDate(1)
+  const { data: spentRows } = await supabase
+    .from('transactions')
+    .select('amount')
+    .eq('user_id', userId)
+    .eq('is_budget', true)
+    .eq('type', 'spending')
+    .gte('date', monthStart.toISOString().slice(0, 10))
+
+  const totalSpent = (spentRows ?? []).reduce((sum, r) => sum + (r.amount as number), 0)
+  const remaining = monthlyBudget - totalSpent
+
+  let balanceLine = ''
+  if (linkedAccount && balanceAfter !== null) {
+    balanceLine = `\n🏦 ${linkedAccount.name}: ${formatCurrency(linkedAccount.balance)} → ${formatCurrency(balanceAfter)}`
+  } else if (linkedAccount) {
+    balanceLine = `\n🏦 Akun: ${linkedAccount.name}`
+  }
+
+  await telegramReply(
+    chatId,
+    `🛒 *Budget dicatat!*\n` +
+      `📝 ${parsed.description}\n` +
+      `💵 ${formatCurrency(parsed.amount)}` +
+      balanceLine +
+      `\n\n💰 Sisa budget: ${formatCurrency(remaining)} / ${formatCurrency(monthlyBudget)}`
+  )
+}
+
 function getHelpMessage(accounts: Account[], defaultAccountId: string | null): string {
   const defaultName = accounts.find(a => a.id === defaultAccountId)?.name ?? '(belum diset)'
   return (
@@ -241,6 +395,7 @@ function getHelpMessage(accounts: Account[], defaultAccountId: string | null): s
     `• /saldo — lihat semua saldo\n` +
     `• /saldo BCA 5jt — update saldo akun\n` +
     `• /transaksi — transaksi bulan ini\n` +
+    `• /spent 400k from bca for games — budget spending\n` +
     `• /akun — lihat & ganti akun default\n` +
     `• /bantuan — pesan ini\n\n` +
     `*Akun default sekarang:* ${defaultName}`
@@ -323,6 +478,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     if (cmd === '/akun' || cmd === '/accounts') {
       await handleAkun(chatId, accounts, defaultAccountId)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (cmd === '/spent') {
+      await handleSpent(chatId, userId, accounts, defaultAccountId, messageBody, supabase)
       return NextResponse.json({ ok: true })
     }
 
