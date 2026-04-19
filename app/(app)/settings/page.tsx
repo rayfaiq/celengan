@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { DemoModal } from '@/components/DemoModal'
 import { formatIDR } from '@/lib/calculations'
 
 export default function SettingsPage() {
@@ -19,10 +20,15 @@ export default function SettingsPage() {
   const [telegramUsername, setTelegramUsername] = useState('')
   const [telegramSaved, setTelegramSaved] = useState(false)
   const [telegramError, setTelegramError] = useState('')
+  const [isDemo, setIsDemo] = useState(false)
+  const [demoModalOpen, setDemoModalOpen] = useState(false)
+  const [monthlyBudget, setMonthlyBudget] = useState('0')
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
+      const demoId = process.env.NEXT_PUBLIC_DEMO_USER_ID
+      if (demoId && user.id === demoId) setIsDemo(true)
       supabase
         .from('settings')
         .select('*')
@@ -36,17 +42,22 @@ export default function SettingsPage() {
             if (data.telegram_username) {
               setTelegramUsername(data.telegram_username)
             }
+            if (data.monthly_budget !== undefined && data.monthly_budget !== null) {
+              setMonthlyBudget(data.monthly_budget.toString())
+            }
           }
         })
     })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleSave() {
+    if (isDemo) { setDemoModalOpen(true); return }
     startTransition(async () => {
       await upsertSettings({
         monthly_income: parseInt(monthlyIncome, 10),
         goal_target: parseInt(goalTarget, 10),
         goal_target_date: goalDate,
+        monthly_budget: parseInt(monthlyBudget, 10) || 0,
       })
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
@@ -54,6 +65,7 @@ export default function SettingsPage() {
   }
 
   async function handleSaveTelegram() {
+    if (isDemo) { setDemoModalOpen(true); return }
     setTelegramError('')
     const cleaned = telegramUsername.trim().replace(/^@/, '')
     if (!/^[a-zA-Z0-9_]{5,32}$/.test(cleaned)) {
@@ -117,6 +129,18 @@ export default function SettingsPage() {
             <Input type="date" value={goalDate} onChange={e => setGoalDate(e.target.value)} />
           </div>
 
+          <div className="space-y-2">
+            <Label>Monthly Budget (IDR)</Label>
+            <Input
+              type="number"
+              value={monthlyBudget}
+              onChange={e => setMonthlyBudget(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              {formatIDR(parseInt(monthlyBudget || '0', 10))} / month for free spending
+            </p>
+          </div>
+
           <Button onClick={handleSave} disabled={isPending} className="w-full">
             {saved ? 'Saved!' : isPending ? 'Saving...' : 'Save Settings'}
           </Button>
@@ -155,6 +179,7 @@ export default function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+      <DemoModal open={demoModalOpen} onClose={() => setDemoModalOpen(false)} />
     </div>
   )
 }
