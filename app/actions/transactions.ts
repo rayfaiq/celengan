@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { isDemoUser } from '@/lib/demo'
 
 export async function createTransaction(data: {
   description: string
@@ -10,10 +11,12 @@ export async function createTransaction(data: {
   date: string
   type: 'spending' | 'income'
   account_id?: string
+  is_budget?: boolean
 }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
+  if (isDemoUser(user.id)) throw new Error('DEMO_MODE')
 
   let accountBalanceMode: 'manual' | 'auto' | null = null
   let currentBalance: number | null = null
@@ -66,6 +69,7 @@ export async function createTransaction(data: {
   }
 
   revalidatePath('/transactions')
+  revalidatePath('/budget')
   revalidatePath('/dashboard')
   revalidatePath('/accounts')
 }
@@ -74,6 +78,7 @@ export async function deleteTransaction(transactionId: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
+  if (isDemoUser(user.id)) throw new Error('DEMO_MODE')
 
   // Fetch transaction before deleting so we can reverse auto-mode balance
   const { data: tx, error: fetchError } = await supabase
@@ -136,6 +141,7 @@ export async function deleteTransaction(transactionId: string) {
   }
 
   revalidatePath('/transactions')
+  revalidatePath('/budget')
   revalidatePath('/dashboard')
   revalidatePath('/accounts')
 }
