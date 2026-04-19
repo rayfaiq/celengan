@@ -179,3 +179,31 @@ export function parseAmountInput(raw: string): number | null {
   const base = parseFloat(plain)
   return isNaN(base) ? null : Math.round(base)
 }
+
+export type BudgetSummary = {
+  monthlyBudget: number
+  spentThisMonth: number
+  rollover: number
+  totalBudget: number  // monthlyBudget + rollover
+  remaining: number    // totalBudget - spentThisMonth
+  percentUsed: number  // 0-100
+}
+
+export function calcBudgetSummary(
+  monthlyBudget: number,
+  spentThisMonth: number,
+  rollover: number
+): BudgetSummary {
+  const totalBudget = monthlyBudget + rollover
+  const remaining = totalBudget - spentThisMonth
+  const percentUsed = totalBudget > 0 ? Math.min(100, (spentThisMonth / totalBudget) * 100) : 0
+
+  return {
+    monthlyBudget,
+    spentThisMonth,
+    rollover,
+    totalBudget,
+    remaining,
+    percentUsed,
+  }
+}
