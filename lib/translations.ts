@@ -44,6 +44,18 @@ export const translations = {
     balanceModeAuto: 'Otomatis',
     balanceModeManualDesc: 'Perbarui saldo secara manual',
     balanceModeAutoDesc: 'Saldo diperbarui otomatis dari transaksi',
+
+    // Budget
+    budget: 'Anggaran',
+    budgetRemaining: 'Sisa Anggaran',
+    budgetSpent: 'Terpakai',
+    budgetRollover: 'Sisa Bulan Lalu',
+    budgetMonthly: 'Anggaran Bulanan',
+    budgetTransaction: 'Transaksi Anggaran',
+    noBudgetSet: 'Belum ada anggaran. Atur di Pengaturan.',
+    noBudgetTransactions: 'Belum ada transaksi anggaran bulan ini.',
+    addBudgetTransaction: 'Tambah Pengeluaran Anggaran',
+    budgetOf: 'dari',
   },
   en: {
     // Navigation
@@ -88,6 +100,18 @@ export const translations = {
     balanceModeAuto: 'Auto',
     balanceModeManualDesc: 'Update balance manually',
     balanceModeAutoDesc: 'Balance updates automatically from transactions',
+
+    // Budget
+    budget: 'Budget',
+    budgetRemaining: 'Budget Remaining',
+    budgetSpent: 'Spent',
+    budgetRollover: 'Rollover',
+    budgetMonthly: 'Monthly Budget',
+    budgetTransaction: 'Budget Transaction',
+    noBudgetSet: 'No budget set. Configure in Settings.',
+    noBudgetTransactions: 'No budget transactions this month.',
+    addBudgetTransaction: 'Add Budget Spending',
+    budgetOf: 'of',
   },
 }
 
