@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { NetWorthChart } from '@/components/charts/NetWorthChart'
 import { RebalancingSuggester } from '@/components/RebalancingSuggester'
 import { MarriageFundGoal } from '@/components/MarriageFundGoal'
+import { BudgetCard } from '@/components/BudgetCard'
 import { ExpenseDelta } from '@/components/ExpenseDelta'
 import { ExportCSV } from '@/components/ExportCSV'
 import { formatIDR } from '@/lib/calculations'
@@ -119,6 +120,13 @@ export default async function DashboardPage() {
             />
           </CardContent>
         </Card>
+
+        {/* Budget */}
+        <BudgetCard
+          monthlyBudget={settings?.monthly_budget ?? 0}
+          spentThisMonth={dashboardData.budgetSpentThisMonth ?? 0}
+          rollover={dashboardData.budgetRollover ?? 0}
+        />
       </div>
 
       {/* Expense Delta */}
