@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { HistoryClient } from './HistoryClient'
+import { isDemoUser } from '@/lib/demo'
 import type { Account } from '@/lib/calculations'
 
 export default async function HistoryPage() {
@@ -49,5 +50,5 @@ export default async function HistoryPage() {
     }))
   }
 
-  return <HistoryClient accounts={accounts} history={history} />
+  return <HistoryClient accounts={accounts} history={history} isDemo={isDemoUser(user!.id)} />
 }

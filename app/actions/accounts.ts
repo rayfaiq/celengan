@@ -2,11 +2,13 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { isDemoUser } from '@/lib/demo'
 
 export async function updateBalance(accountId: string, newBalance: number) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
+  if (isDemoUser(user.id)) throw new Error('DEMO_MODE')
 
   // Fetch current balance to store as previous_balance in history
   const { data: existing } = await supabase
@@ -46,6 +48,7 @@ export async function createAccount(data: {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
+  if (isDemoUser(user.id)) throw new Error('DEMO_MODE')
 
   const { error } = await supabase
     .from('accounts')
@@ -61,6 +64,7 @@ export async function updateAccountMode(accountId: string, balance_mode: 'manual
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
+  if (isDemoUser(user.id)) throw new Error('DEMO_MODE')
 
   const { error } = await supabase
     .from('accounts')
@@ -78,6 +82,7 @@ export async function deleteAccount(accountId: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
+  if (isDemoUser(user.id)) throw new Error('DEMO_MODE')
 
   const { error } = await supabase
     .from('accounts')
@@ -95,6 +100,7 @@ export async function deleteBalanceHistory(historyId: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
+  if (isDemoUser(user.id)) throw new Error('DEMO_MODE')
 
   // Verify the history entry belongs to user's account
   const { data: historyData } = await supabase
@@ -133,6 +139,7 @@ export async function updateBalanceHistory(
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
+  if (isDemoUser(user.id)) throw new Error('DEMO_MODE')
 
   // Verify the history entry belongs to user's account
   const { data: historyData } = await supabase

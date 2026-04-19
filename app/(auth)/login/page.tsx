@@ -2,17 +2,19 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { signInAsDemo } from '@/app/actions/demo'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { PiggyBank } from 'lucide-react'
+import { PiggyBank, FlaskConical } from 'lucide-react'
 
 export default function LoginPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
 
   const [mode, setMode] = useState<'signin' | 'signup'>('signin')
@@ -20,6 +22,23 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [demoLoading, setDemoLoading] = useState(false)
+
+  useEffect(() => {
+    if (searchParams.get('mode') === 'signup') {
+      setMode('signup')
+    }
+  }, [searchParams])
+
+  async function handleTryDemo() {
+    setDemoLoading(true)
+    try {
+      await signInAsDemo()
+    } catch {
+      setError('Demo sign-in failed. Please try again.')
+      setDemoLoading(false)
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -103,6 +122,29 @@ export default function LoginPage() {
             </button>
           </p>
         </form>
+
+        {process.env.NEXT_PUBLIC_DEMO_USER_ID && (
+          <>
+            <div className="relative my-4">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t border-border" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-card px-2 text-muted-foreground">or</span>
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={handleTryDemo}
+              disabled={demoLoading}
+            >
+              <FlaskConical className="h-4 w-4 mr-2 text-amber-400" />
+              {demoLoading ? 'Loading demo...' : 'Try Demo (no account needed)'}
+            </Button>
+          </>
+        )}
       </CardContent>
     </Card>
   )

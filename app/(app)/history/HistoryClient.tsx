@@ -7,6 +7,7 @@ import { deleteBalanceHistory, updateBalanceHistory } from '@/app/actions/accoun
 import { formatCurrency } from '@/lib/currency'
 import { useLanguage } from '@/lib/language-context'
 import { getTranslation } from '@/lib/translations'
+import { DemoModal } from '@/components/DemoModal'
 import type { Account } from '@/lib/calculations'
 
 interface HistoryEntry {
@@ -20,6 +21,7 @@ interface HistoryEntry {
 interface HistoryClientProps {
   accounts: Account[]
   history: HistoryEntry[]
+  isDemo?: boolean
 }
 
 interface MonthData {
@@ -31,7 +33,7 @@ interface MonthData {
   totalNetworth: number
 }
 
-export function HistoryClient({ accounts, history }: HistoryClientProps) {
+export function HistoryClient({ accounts, history, isDemo = false }: HistoryClientProps) {
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValues, setEditValues] = useState<{ balance: string; previousBalance: string }>({
@@ -40,6 +42,7 @@ export function HistoryClient({ accounts, history }: HistoryClientProps) {
   })
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [demoModalOpen, setDemoModalOpen] = useState(false)
   const { language } = useLanguage()
 
   const accountMap = useMemo(() => {
@@ -112,6 +115,7 @@ export function HistoryClient({ accounts, history }: HistoryClientProps) {
   const selectedMonthData = selectedMonth ? allMonthsData.find(m => m.monthKey === selectedMonth) : null
 
   const handleDelete = async (historyId: string) => {
+    if (isDemo) { setDemoModalOpen(true); return }
     if (!confirm('Are you sure you want to delete this balance log?')) return
 
     setIsLoading(true)
@@ -127,6 +131,7 @@ export function HistoryClient({ accounts, history }: HistoryClientProps) {
   }
 
   const handleEditStart = (entry: HistoryEntry) => {
+    if (isDemo) { setDemoModalOpen(true); return }
     setEditingId(entry.id)
     setEditValues({
       balance: entry.balanceAtTime.toString(),
@@ -405,6 +410,8 @@ export function HistoryClient({ accounts, history }: HistoryClientProps) {
           </div>
         </div>
       )}
+
+      <DemoModal open={demoModalOpen} onClose={() => setDemoModalOpen(false)} />
     </div>
   )
 }

@@ -17,9 +17,11 @@ import { Plus, Trash2, Pencil, RefreshCw } from 'lucide-react'
 import { updateBalance, createAccount, deleteAccount, updateAccountMode } from '@/app/actions/accounts'
 import { formatIDR } from '@/lib/calculations'
 import { AmountInput } from '@/components/AmountInput'
+import { DemoModal } from '@/components/DemoModal'
 import type { Account } from '@/lib/calculations'
 
-export function AccountsClient({ accounts }: { accounts: Account[] }) {
+export function AccountsClient({ accounts, isDemo = false }: { accounts: Account[]; isDemo?: boolean }) {
+  const [demoModalOpen, setDemoModalOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [editAccount, setEditAccount] = useState<Account | null>(null)
   const [newBalance, setNewBalance] = useState<number | null>(null)
@@ -32,6 +34,7 @@ export function AccountsClient({ accounts }: { accounts: Account[] }) {
   const [modeEditOpen, setModeEditOpen] = useState(false)
 
   function handleUpdateBalance(account: Account) {
+    if (isDemo) { setDemoModalOpen(true); return }
     if (newBalance == null) return
     startTransition(async () => {
       try {
@@ -45,6 +48,7 @@ export function AccountsClient({ accounts }: { accounts: Account[] }) {
   }
 
   function handleCreate() {
+    if (isDemo) { setDemoModalOpen(true); return }
     if (!newName.trim()) return
     startTransition(async () => {
       try {
@@ -59,11 +63,13 @@ export function AccountsClient({ accounts }: { accounts: Account[] }) {
   }
 
   function handleDelete(id: string) {
+    if (isDemo) { setDemoModalOpen(true); return }
     if (!confirm('Delete this account and all its history?')) return
     startTransition(async () => { await deleteAccount(id) })
   }
 
   function handleModeChange(account: Account, mode: 'manual' | 'auto') {
+    if (isDemo) { setDemoModalOpen(true); return }
     startTransition(async () => {
       try {
         await updateAccountMode(account.id, mode)
@@ -81,7 +87,7 @@ export function AccountsClient({ accounts }: { accounts: Account[] }) {
         <h1 className="text-2xl font-bold">Accounts</h1>
         <Dialog open={addOpen} onOpenChange={setAddOpen}>
           <DialogTrigger asChild>
-            <Button size="sm">
+            <Button size="sm" onClick={isDemo ? (e) => { e.preventDefault(); setDemoModalOpen(true) } : undefined}>
               <Plus className="h-4 w-4 mr-2" />
               Add Account
             </Button>
@@ -308,6 +314,8 @@ export function AccountsClient({ accounts }: { accounts: Account[] }) {
           </Card>
         ))}
       </div>
+
+      <DemoModal open={demoModalOpen} onClose={() => setDemoModalOpen(false)} />
     </div>
   )
 }

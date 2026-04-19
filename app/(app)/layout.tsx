@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { Sidebar } from '@/components/Sidebar'
+import { isDemoUser } from '@/lib/demo'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -10,9 +11,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect('/login')
   }
 
+  const isDemo = isDemoUser(user.id)
+
   return (
     <div className="flex min-h-screen bg-background">
-      <Sidebar userEmail={user.email ?? ''} />
+      <Sidebar userEmail={user.email ?? ''} isDemo={isDemo} />
       <main className="flex-1 p-4 md:p-8 pb-20 md:pb-8">
         {children}
       </main>

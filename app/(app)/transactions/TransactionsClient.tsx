@@ -11,6 +11,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import { DemoModal } from '@/components/DemoModal'
 import {
   Table,
   TableBody,
@@ -46,6 +47,7 @@ type Props = {
   accounts: { id: string; name: string }[]
   accountFilter?: string
   accountDeltas: AccountDelta[]
+  isDemo?: boolean
 }
 
 export function TransactionsClient({
@@ -57,9 +59,11 @@ export function TransactionsClient({
   accounts,
   accountFilter,
   accountDeltas,
+  isDemo = false,
 }: Props) {
   const [isPending, startTransition] = useTransition()
   const [open, setOpen] = useState(false)
+  const [demoModalOpen, setDemoModalOpen] = useState(false)
   const [desc, setDesc] = useState('')
   const [amountValue, setAmountValue] = useState<number | null>(null)
   const [category, setCategory] = useState('')
@@ -68,6 +72,7 @@ export function TransactionsClient({
   const [selectedAccountId, setSelectedAccountId] = useState(accountFilter ?? '')
 
   function handleCreate() {
+    if (isDemo) { setDemoModalOpen(true); return }
     if (!desc.trim() || amountValue == null || amountValue <= 0) return
     startTransition(() => {
       createTransaction({
@@ -93,7 +98,7 @@ export function TransactionsClient({
         <h1 className="text-2xl font-bold">Transactions</h1>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button size="sm">
+            <Button size="sm" onClick={isDemo ? (e) => { e.preventDefault(); setDemoModalOpen(true) } : undefined}>
               <Plus className="h-4 w-4 mr-2" />
               Add Transaction
             </Button>
@@ -280,7 +285,10 @@ export function TransactionsClient({
                   </TableCell>
                   <TableCell>
                     <button
-                      onClick={() => startTransition(() => deleteTransaction(t.id))}
+                      onClick={() => {
+                        if (isDemo) { setDemoModalOpen(true); return }
+                        startTransition(() => deleteTransaction(t.id))
+                      }}
                       className="text-muted-foreground hover:text-red-400 transition-colors"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -292,6 +300,8 @@ export function TransactionsClient({
           </Table>
         </div>
       )}
+
+      <DemoModal open={demoModalOpen} onClose={() => setDemoModalOpen(false)} />
     </div>
   )
 }

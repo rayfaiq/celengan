@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { TransactionsClient } from './TransactionsClient'
 import { calcUnaccountedSpending, calcPerAccountDeltas } from '@/lib/calculations'
+import { isDemoUser } from '@/lib/demo'
 import type { BalanceHistoryRow, Account } from '@/lib/calculations'
 
 export default async function TransactionsPage({
@@ -142,6 +143,7 @@ export default async function TransactionsPage({
       accounts={accounts}
       accountFilter={accountFilter}
       accountDeltas={accountDeltas}
+      isDemo={isDemoUser(user!.id)}
     />
   )
 }

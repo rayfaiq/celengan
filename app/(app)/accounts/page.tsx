@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { AccountsClient } from './AccountsClient'
+import { isDemoUser } from '@/lib/demo'
 import type { Account } from '@/lib/calculations'
 
 export default async function AccountsPage() {
@@ -21,5 +22,5 @@ export default async function AccountsPage() {
     balance_mode: a.balance_mode as 'manual' | 'auto',
   }))
 
-  return <AccountsClient accounts={accounts} />
+  return <AccountsClient accounts={accounts} isDemo={isDemoUser(user!.id)} />
 }
