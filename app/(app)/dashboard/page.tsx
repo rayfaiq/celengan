@@ -12,23 +12,22 @@ export default async function DashboardPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  let { data: dashboardData } = await supabase.rpc('get_dashboard_data', { p_user_id: user!.id }).single()
+  const { data: dashboardData } = await supabase.rpc('get_dashboard_data', { p_user_id: user!.id }).single()
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const d = dashboardData as any
+  const netWorth = d.netWorth
+  const chartData = d.chartData
+  const accounts = d.accounts
+  const accountDeltas = d.accountDeltas as any[]
+  const settings = d.settings
+  const unaccountedSpending = d.unaccountedSpending
+  const spendingTotal = d.spendingTotal
+  const incomeTotal = d.incomeTotal
+  const totalDelta = d.totalDelta
+  const transactions = d.transactions as any[]
 
-  const {
-    netWorth,
-    chartData,
-    accounts,
-    accountDeltas,
-    settings,
-    unaccountedSpending,
-    spendingTotal,
-    incomeTotal,
-    totalDelta,
-    transactions,
-  } = dashboardData
-
-  const exportTransactions = transactions.map(t => ({
+  const exportTransactions = transactions.map((t: any) => ({
     description: t.description,
     amount: t.amount,
     category: t.category,
@@ -124,8 +123,8 @@ export default async function DashboardPage() {
         {/* Budget */}
         <BudgetCard
           monthlyBudget={settings?.monthly_budget ?? 0}
-          spentThisMonth={dashboardData.budgetSpentThisMonth ?? 0}
-          rollover={dashboardData.budgetRollover ?? 0}
+          spentThisMonth={d.budgetSpentThisMonth ?? 0}
+          rollover={d.budgetRollover ?? 0}
         />
       </div>
 
