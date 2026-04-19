@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, Wallet, Receipt, Settings, LogOut, PiggyBank, History } from 'lucide-react'
+import { LayoutDashboard, Wallet, Receipt, Settings, LogOut, PiggyBank, History, BadgeDollarSign } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { useLanguage } from '@/lib/language-context'
@@ -13,11 +13,12 @@ const navItems = [
   { href: '/dashboard', labelKey: 'dashboard' as const, icon: LayoutDashboard },
   { href: '/accounts', labelKey: 'accounts' as const, icon: Wallet },
   { href: '/transactions', labelKey: 'transactions' as const, icon: Receipt },
+  { href: '/budget', labelKey: 'budget' as const, icon: BadgeDollarSign },
   { href: '/history', labelKey: 'history' as const, icon: History },
   { href: '/settings', labelKey: 'settings' as const, icon: Settings },
 ]
 
-export function Sidebar({ userEmail }: { userEmail: string }) {
+export function Sidebar({ userEmail, isDemo = false }: { userEmail: string; isDemo?: boolean }) {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
@@ -87,7 +88,18 @@ export function Sidebar({ userEmail }: { userEmail: string }) {
             </button>
           </div>
 
-          <p className="text-xs text-muted-foreground truncate px-3">{userEmail}</p>
+          {isDemo ? (
+            <div className="px-3 space-y-1">
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/15 text-amber-400 border border-amber-500/20">
+                Demo Mode
+              </span>
+              <p className="text-xs text-muted-foreground">
+                <a href="/login?mode=signup" className="text-emerald-400 hover:underline">Sign up free</a> to save your data
+              </p>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground truncate px-3">{userEmail}</p>
+          )}
           <button
             onClick={handleSignOut}
             className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-accent hover:text-foreground w-full transition-colors"
